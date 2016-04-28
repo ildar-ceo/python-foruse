@@ -1,0 +1,4 @@
+recursive-include pyangularjs *.py
+recursive-include pyangularjs *.pyc
+global-exclude *.pyc
+global-exclude .git

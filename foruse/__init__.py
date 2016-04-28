@@ -1,0 +1,10 @@
+# -*- coding: utf-8 -*- 
+
+__author__ = "Ildar Bikmamatov"
+__email__ = "vistoyn@gmail.com"
+__copyright__ = "Copyright 2016"
+__license__ = "MIT"
+__version__ = "0.1"
+
+from .lib import *
+from .error import *
