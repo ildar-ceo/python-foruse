@@ -8,3 +8,4 @@ __version__ = "0.1"
 
 from .lib import *
 from .error import *
+from .colors import colorf

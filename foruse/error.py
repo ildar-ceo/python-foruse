@@ -14,3 +14,7 @@ def get_traceback():
 	exception_str = exception_str[:-1]
 
 	return exception_str
+	
+	
+def print_traceback():
+	print(get_traceback()) 
