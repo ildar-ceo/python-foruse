@@ -4,14 +4,118 @@ import string
 import random
 import sys
 import os
+import copy
 import re
 import shutil
 import distutils.dir_util
 import distutils.file_util
+from urllib.parse import urlsplit
+
+def is_exists(a):
+	return a != None and a != "" and a != 0
+
+# -----------------------------------------------------------------------------
+# Функции для работы с массивами
+# -----------------------------------------------------------------------------
+
+def clone(var):
+	t = type(var)
+	if (t is list or t is dict):
+		return copy.deepcopy(var)
+	return var
+
+
+# Получить значение из массива или списка по его ключам
+def xarr(arr, *args, default=None):
+	res=arr
+	for key in args:
+		try:
+			res=res[key]
+		except:
+			res=default
+			break
+	
+	if res is None:
+		res=default
+	
+	return res
+
+
+# Получить значение из массива или списка по его ключам и сделаем копию
+def xclone(arr, *args, **kwargs):	
+	return clone(xarr(arr, *args, **kwargs))
+
+	
+# Добавить значение	в список по ключам
+def xadd(arr, *args, value=None):
+	size = len(args)
+	res = arr
+	for index, key in xitems(args):
+		if index == size - 1:
+			res[key] = value
+		else:
+			try:
+				res=res[key]
+			except:
+				res[key] = {}
+				res = res[key]
+		#!endif
+	#!endfor	
+	
+	
+# Возвращает пару ключ->значение в зависимости от типа Dict или List
+def xitems(arr):
+	t = type(arr)
+	if t is list or t is tuple:
+		return enumerate(arr)
+	elif t is dict:
+		return arr.items()
+	return []
+	
+# Возвращает ключи в зависимости от типа Dict или List
+def xkeys(arr):
+	t = type(arr)
+	if t is list or t is tuple:
+		return range(len(arr))
+	elif type(arr) is dict:
+		return arr.keys()
+	return []
+	
+# Возвращает значения в зависимости от типа Dict или List
+def xvalues(arr):
+	if t is list or t is tuple:
+		return arr
+	elif type(arr) is dict:
+		return arr.values()
+	return []
 
 # -----------------------------------------------------------------------------
 # Функции для работы с файловой системой
 # -----------------------------------------------------------------------------
+
+# Функция возвращает имя файла или папки
+def getfilename(name):
+	try:
+		arr = basename(name).split('.')
+		return arr[0]
+	except:
+		return ""
+
+# Функция возвращает имя файла или папки
+def getfileext(name):
+	try:
+		arr = basename(name).split('.')
+		return arr[1]
+	except:
+		return ""
+	
+# Функция возвращает имя вместе с расширением файла или папки
+def basename(filename):
+	return os.path.basename(filename)
+
+# Функция возвращает путь файла или папки
+def dirname(filename):
+	return os.path.dirname(filename)
 
 # Функция возвращает текущую папку
 def get_current_dir():
@@ -111,31 +215,76 @@ def join_paths(*args, **kwargs):
 	s = re.sub('/+','/',s)
 	return delete_last_slash(s)
 	
-# Возвращает пару ключ->значение в зависимости от типа Dict или List
-def xitems(arr):
-	if type(arr) == list:
-		return enumerate(arr)
-	if type(arr) == dict:
-		return arr.items()
-	return []
+
+# -----------------------------------------------------------------------------
+# Улучшенная реализация функции urlparse2
+# -----------------------------------------------------------------------------
 	
-# Возвращает ключи в зависимости от типа Dict или List
-def xkeys(arr):
-	if type(arr) == list:
-		return range(len(arr))
-	if type(arr) == dict:
-		return arr.keys()
-	return []
+class UrlSplitResult:
+	def __init__(self, *args, **kwargs):
+		self.scheme = xarr(args, 0)
+		self.path = xarr(args, 2)
+		self.query = xarr(args, 3)
+		self.fragment = xarr(args, 4)
+		self.hostname = None
+		self.port = None
+		self.username = None
+		self.password = None
+		
+		netloc = xarr(args, 1)
+		netloc = netloc.split(':')
+		if len(netloc) >= 3:
+			self.hostname = netloc[1]
+			self.port = netloc[2]
+			arr = netloc[0].split('@')
+			self.username = xarr(arr, 0, default=None)
+			self.password = xarr(arr, 1, default=None)
+		else:
+			self.hostname = xarr(netloc, 0, default=None)
+			self.port = xarr(netloc, 1, default=None)
+	#!enddef __init__
 	
-# Возвращает значения в зависимости от типа Dict или List
-def xvalues(arr):
-	if type(arr) == list:
-		return arr
-	if type(arr) == dict:
-		return arr.values()
-	return []
+	def __str__(self):
+		res = ""
+		
+		netloc = None
+		if is_exists(self.hostname):
+			user_password = None
+			if is_exists(self.username):
+				user_password = str(self.username) + "@" + str(self.password)
+			
+			netloc = self.hostname
+			if is_exists(self.port):
+				netloc = netloc + ":" + str(self.port)
+			
+			if is_exists(user_password):
+				netloc = str(user_password) + ":" + str(netloc)
+			
+			res = str(netloc)
+		
+		if is_exists(self.scheme):
+			res = str(self.scheme) + "://" + str(res)
+		
+		if is_exists(self.path):
+			res = res + str(self.path)
+		
+		if is_exists(self.query):
+			res = res + '?' + str(self.query)
+		
+		if is_exists(self.fragment):
+			res = res + '#' + str(self.fragment)
+		
+		return res
+	#!enddef __str__
+	
+#!endclass UrlSplitResult
 
 
+def urlparse2(path, *args, **kwargs):
+	res = urlsplit(path, *args, **kwargs)
+	return UrlSplitResult(*res)	
+	
+	
 # -----------------------------------------------------------------------------
 # Функции var_dump
 # -----------------------------------------------------------------------------
