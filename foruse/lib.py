@@ -12,7 +12,7 @@ import distutils.file_util
 from urllib.parse import urlsplit
 
 def is_exists(a):
-	return a != None and a != "" and a != 0
+	return a != None and a != "" and a != 0 and a != False
 
 # -----------------------------------------------------------------------------
 # Функции для работы с массивами
@@ -90,6 +90,34 @@ def xvalues(arr):
 	return []
 
 # -----------------------------------------------------------------------------
+# Функции для преобразования типов
+# -----------------------------------------------------------------------------
+	
+def xbool(val, default=None):
+	t = type(val)
+	if t is bool:
+		return val
+	
+	if t is str:
+		val = val.lower()
+		if val == 'false' or val == '0':
+			return False
+		
+		if val == 'true' or val == '1':
+			return False
+		
+		if val.isdigit():
+			return True
+		
+	if t is int:
+		if val == 0:
+			return False
+		
+		return True
+	
+	return default
+	
+# -----------------------------------------------------------------------------
 # Функции для работы с файловой системой
 # -----------------------------------------------------------------------------
 
@@ -140,7 +168,10 @@ def is_file(file_name):
 def mkdir(dirname):
 	if not is_dir(dirname):
 		os.makedirs(dirname)
-	
+
+def unlink(filename):
+	os.remove(filename)
+		
 def remove_dir(dirname):
 	if is_dir(dirname):
 		#https://docs.python.org/3.5/distutils/apiref.html#distutils.dir_util.remove_tree
