@@ -2,7 +2,11 @@
 
 import datetime, dateutil.tz
 
-def get_dbtime(t):
+DATETIME_FORMAT='%Y-%m-%d %H:%M:%S'
+DATE_FORMAT='%Y-%m-%d'
+TIME_FORMAT='%H:%M:%S'
+
+def gmdbtime(t):
 	res = datetime.datetime.utcfromtimestamp(t)
 	res = res.replace(tzinfo=datetime.timezone.utc)
 	return res.strftime('%Y-%m-%d %H:%M:%S')
@@ -23,15 +27,15 @@ def tzutc():
 def tzlocal():
 	return dateutil.tz.tzlocal()
 	
-def get_localtime():
+def localtime():
 	tz = tzlocal()
 	return datetime.datetime.now(tz)
 
-def get_gmtime():
+def gmtime():
 	tz = tzutc()
 	return datetime.datetime.now(tz)
 	
-def get_utctime():
+def utctime():
 	tz = tzutc()
 	return datetime.datetime.now(tz)
 	

@@ -6,6 +6,8 @@ __copyright__ = "Copyright 2016"
 __license__ = "MIT"
 __version__ = "0.1"
 
+from . import log
 from .lib import *
 from .error import *
 from .colors import colorf
+from .datelib import *
