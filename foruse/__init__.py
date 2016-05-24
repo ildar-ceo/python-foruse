@@ -11,3 +11,4 @@ from .lib import *
 from .error import *
 from .colors import colorf
 from .datelib import *
+from .aio import *

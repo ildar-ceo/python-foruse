@@ -83,9 +83,10 @@ def xkeys(arr):
 	
 # Возвращает значения в зависимости от типа Dict или List
 def xvalues(arr):
+	t = type(arr)
 	if t is list or t is tuple:
 		return arr
-	elif type(arr) is dict:
+	elif t is dict:
 		return arr.values()
 	return []
 
@@ -116,6 +117,16 @@ def xbool(val, default=None):
 		return True
 	
 	return default
+	
+def to_str(b, encoding="utf-8", errors="strict"):
+	if type(b) is byte:
+		return b.decode(encoding=encoding, errors=errors)
+	return ""
+	
+def to_byte(s, encoding="utf-8", errors="strict"):
+	if type(s) is str:
+		return s.encode(encoding=encoding, errors=errors)
+	return b""
 	
 # -----------------------------------------------------------------------------
 # Функции для работы с файловой системой

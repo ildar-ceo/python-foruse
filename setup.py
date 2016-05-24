@@ -3,10 +3,12 @@
 """
 Инструкции:
 
-python setup.py sdist - Сборка пакета
-python setup.py develop - Установка пакета для разработки
-pip install dist/foruse-0.1.zip - Установка пакета
-pip uninstall foruse - Удаление пакета
+python3 setup.py sdist - Сборка пакета
+python3 setup.py develop - Установка пакета для разработки
+pip3 install dist/foruse-0.1.zip - Установка пакета
+pip3 uninstall foruse - Удаление пакета
+python3 setup.py register - Зарегистрировать пакет в pypi
+python3 setup.py sdist upload - Залить на сервер
 """
 
 from setuptools import setup, find_packages
