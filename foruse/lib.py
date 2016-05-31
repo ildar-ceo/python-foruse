@@ -105,7 +105,7 @@ def xbool(val, default=None):
 			return False
 		
 		if val == 'true' or val == '1':
-			return False
+			return True
 		
 		if val.isdigit():
 			return True
@@ -167,6 +167,10 @@ def get_current_dirrectory():
 # Функция проверяет есть ли файл или нет
 def file_exists(file_name):
 	return os.path.exists(file_name) 
+
+# Функция проверяет существует ли папка file_name
+def dir_exists(file_name):
+	return os.path.isdir(file_name) 
 	
 # Функция проверяет является ли file_name папкой
 def is_dir(file_name):
@@ -265,6 +269,7 @@ def join_paths(*args, **kwargs):
 class UrlSplitResult:
 	def __init__(self, *args, **kwargs):
 		self.scheme = xarr(args, 0)
+		self.netloc = xarr(args, 1)
 		self.path = xarr(args, 2)
 		self.query = xarr(args, 3)
 		self.fragment = xarr(args, 4)
@@ -272,8 +277,10 @@ class UrlSplitResult:
 		self.port = None
 		self.username = None
 		self.password = None
-		
-		netloc = xarr(args, 1)
+	#!enddef __init__
+	
+	def init(self):
+		netloc = self.netloc
 		netloc = netloc.split(':')
 		if len(netloc) >= 3:
 			self.hostname = netloc[1]
@@ -284,7 +291,6 @@ class UrlSplitResult:
 		else:
 			self.hostname = xarr(netloc, 0, default=None)
 			self.port = xarr(netloc, 1, default=None)
-	#!enddef __init__
 	
 	def __str__(self):
 		res = ""
@@ -324,7 +330,9 @@ class UrlSplitResult:
 
 def urlparse2(path, *args, **kwargs):
 	res = urlsplit(path, *args, **kwargs)
-	return UrlSplitResult(*res)	
+	url = UrlSplitResult(*res)
+	url.init()
+	return url
 	
 	
 # -----------------------------------------------------------------------------
