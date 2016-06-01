@@ -93,7 +93,18 @@ def xvalues(arr):
 # -----------------------------------------------------------------------------
 # Функции для преобразования типов
 # -----------------------------------------------------------------------------
+
+def xint(val, default=0):
+	try:
+		val = int(val)
+	except:
+		try:
+			val = int(default)
+		except:
+			val = 0
 	
+	return val
+
 def xbool(val, default=None):
 	t = type(val)
 	if t is bool:

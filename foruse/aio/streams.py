@@ -54,11 +54,19 @@ class AbstractStream(log.Log):
 		if self._loop == None:
 			self._loop = asyncio.get_event_loop()
 			
-		self._buffer = BufferStream(max_size=kwargs.get('max_size'), min_size=kwargs.get('min_size'))
-		
 		self._chunk_size = kwargs.get('chunk_size', 8192)
 		self._read_loop_waiter = None
 		self._start_seek = 0
+		
+		self._create_buffer(*args, **kwargs)
+		
+	def set_min_size(self, size):
+		if size <= self._buffer._max_size:
+			self._buffer._min_size = size
+	
+	
+	def _create_buffer(self, *args, **kwargs):
+		self._buffer = BufferStream(max_size=kwargs.get('max_size'), min_size=kwargs.get('min_size'))
 		
 		
 	def seekable(self):
@@ -107,6 +115,9 @@ class AbstractStream(log.Log):
 	
 	async def open(self):
 		return await self._open()
+	
+	async def stop(self):
+		await self.close()
 	
 	async def close(self):
 		await self._stop_read_loop()
@@ -157,23 +168,27 @@ class AbstractStream(log.Log):
 	
 	async def _loop_read(self):
 		self._read_loop_waiter = asyncio.futures.Future(loop=self._loop)
+		#print ('Start loop!')
 		
 		try:
+			#print (await self._eof())
 			while not self._buffer.is_stop() and not await self._eof():
 				data = await self._read(self._chunk_size)
 				if len(data) > 0:
 					await self._buffer.write(data)
 				
 		except Exception as e:
-			#print (e)
+			print (e)
 			self._buffer.set_exception(e)
 		
+		#print ('Stop loop!')
 		await self._buffer.stop()
 		self._read_loop_waiter.set_result(None)
+		self._read_loop_waiter = None
 	#!enddef
 	
 	
-	async def _start_read_loop(self):
+	async def _try_start_read_loop(self):
 		if self._read_loop_waiter is None:
 			await self._buffer.clear()
 			self._loop.create_task(self._loop_read())
@@ -181,7 +196,6 @@ class AbstractStream(log.Log):
 	
 	
 	async def _stop_read_loop(self):
-		await self._buffer.stop()
 		if self._read_loop_waiter is not None:
 			await self._read_loop_waiter
 			self._read_loop_waiter = None
@@ -190,7 +204,7 @@ class AbstractStream(log.Log):
 	
 	async def get_read_buffer():
 		if self.readable():
-			await self._start_read_loop()
+			await self._try_start_read_loop()
 			return self._buffer
 			
 		else:
@@ -200,17 +214,14 @@ class AbstractStream(log.Log):
 	#!enddef
 	
 		
-	async def read(self, count=0):
+	async def read(self, count = -1):
 		try:
 			count = int(count)
 		except:
-			count = None
-			
-		if count <= 0 or count is None:
-			count = self._chunk_size
+			count = -1
 		
 		if self.readable():
-			await self._start_read_loop()
+			await self._try_start_read_loop()
 			return await self._buffer.read(count)
 			
 		else:
@@ -220,7 +231,7 @@ class AbstractStream(log.Log):
 	
 	async def skip(self):
 		if self.readable():
-			await self._start_read_loop()
+			await self._try_start_read_loop()
 			await self._buffer.skip()
 		else:
 			raise IOException("Read from unreadable stream")
@@ -229,7 +240,7 @@ class AbstractStream(log.Log):
 	
 	async def skip_line(self):
 		if self.readable():
-			await self._start_read_loop()
+			await self._try_start_read_loop()
 			await self._buffer.skip_line()
 		else:
 			raise IOException("Read from unreadable stream")
@@ -238,17 +249,17 @@ class AbstractStream(log.Log):
 	
 	async def get_line_stream(self):
 		if self.readable():
-			await self._start_read_loop()
+			await self._try_start_read_loop()
 			return await self._buffer.get_line_stream()
 		else:
 			raise IOException("Read from unreadable stream")
 	#!enddef get_line_stream
 	
 	
-	async def readline(self):
+	async def readline(self, maxlen = -1):
 		if self.readable():
-			await self._start_read_loop()
-			return await self._buffer.readline()
+			await self._try_start_read_loop()
+			return await self._buffer.readline(maxlen)
 		else:
 			raise IOException("Read from unreadable stream")
 	#!enddef readline
@@ -256,7 +267,7 @@ class AbstractStream(log.Log):
 	
 	async def readline_skip(self):
 		if self.readable():
-			await self._start_read_loop()
+			await self._try_start_read_loop()
 			return await self._buffer.readline_skip()
 		else:
 			raise IOException("Read from unreadable stream")
@@ -265,7 +276,7 @@ class AbstractStream(log.Log):
 	
 	async def get_count_stream(self):
 		if self.readable():
-			await self._start_read_loop()
+			await self._try_start_read_loop()
 			return await self._buffer.get_count_stream()
 		else:
 			raise IOException("Read from unreadable stream")
@@ -375,9 +386,12 @@ class ListStream(AbstractStream):
 	
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
+		self._is_eof = False
+		self._is_stop = False
+		self._read_waiter = None
 		self._list = []
-		self._pos = 0
 		
+	
 	def seekable(self):
 		return True
 	
@@ -387,31 +401,75 @@ class ListStream(AbstractStream):
 	def readable(self):
 		return True
 	
+	
+	async def _try_lock_read(self):
+		if len(self._list) == 0 and not self._is_stop and not self._is_eof:
+			await self._lock_read()
+	
+	async def _lock_read(self):
+		if self._read_waiter is None:
+			self._read_waiter = asyncio.futures.Future(loop=self._loop)
+		try:
+			await self._read_waiter
+		finally:
+			self._read_waiter = None
+	#!enddef
+	
+	def _unlock_read(self):
+		if self._read_waiter is not None:
+			self._read_waiter.set_result(None)
+		self._read_waiter = None
+	#!enddef
+	
+	
+	async def stop(self):
+		self._is_stop = True
+		self._unlock_read()
+		
 	async def _open(self):
 		return True
 	
 	async def _close(self):
-		self._pos = len(self._list)
+		self._list = []
+		self._is_stop = True
+		self._unlock_read()
 	
 	async def _read(self, count=-1):
-		pos = self._pos
-		self._pos+=1
-		return self._list[pos]
+		await self._try_lock_read()
+		if len(self._list) == 0:
+			return []
+		
+		data = self._list[0]
+		del self._list[0]
+		
+		return data
 	
-	async def _write(self, buf):
-		self._list.append(buf)
+	def feed_data(self, buf):
+		if not self._is_stop:
+			self._list.append(buf)
+			self._unlock_read()
+	
+	def feed_flush(self):
+		asyncio.ensure_future(self._buffer.flush())
+	
+	def feed_eof(self):
+		self._is_eof = True
+		self._unlock_read()
 	
 	async def _seek(self, offset, whence):
-		self._pos = 0
+		pass
 	
 	async def _tell(self):
-		return 0
+		return None
 	
 	async def _size(self):
 		return None
 	
 	async def _eof(self):
-		return self._pos >= len(self._list)
+		return len(self._list) == 0 and self._is_eof == True
+	
+	async def eof(self):
+		return len(self._list) == 0 and self._is_eof == True
 	
 	async def _flush(self):
 		pass

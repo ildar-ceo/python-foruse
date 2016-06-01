@@ -14,27 +14,16 @@ class BufferStream:
 		if self._loop == None:
 			self._loop = asyncio.get_event_loop()
 		
-		self._max_size = kwargs.get('max_size')
-		self._min_size = kwargs.get('min_size') 
+		self._max_size = xint(kwargs.get('max_size'), 16384)
+		self._min_size = xint(kwargs.get('min_size'), 1)
 		
-		try:
-			self._max_size = int(self._max_size)
-			self._min_size = int(self._max_size)
-			if self._max_size < self._min_size:
-				self._max_size = None
-				self._min_size = None
-		except:
-			self._max_size = None
-			self._min_size = None
-		
-		if self._max_size is None:
-			self._max_size = 16384 # 16384
-		
-		if self._min_size is None:
-			self._min_size = 1024 # 1024
+		if self._max_size < self._min_size:
+			self._max_size = 16384
+			self._min_size = 1024
 		
 		self._is_eof = False
 		self._is_stop = False
+		self._is_flushed = False
 		
 		self._buffer = bytearray(self._max_size)
 		self._cur = 0
@@ -55,6 +44,17 @@ class BufferStream:
 	def get_buffer(self):
 		return self._buffer[self._cur:self._end]
 	
+	async def clear(self):
+		self._exception = None
+		self._count_readed = 0
+		self._cur = 0
+		self._end = 0
+		self._is_stop = False
+		self._is_eof = False
+		self._is_flushed = False
+		await self._unlock_read()
+		await self._unlock_write()
+	
 	async def close(self):
 		await self.stop()
 	
@@ -63,12 +63,16 @@ class BufferStream:
 		self._is_eof = True
 		await self._unlock_read()
 		await self._unlock_write()
-	
+		
 	async def get_pos(self):
 		return self._count_readed
 	#!enddef
 
 	async def _try_lock_read(self):
+		if self._is_flushed:
+			self._is_flushed = False
+			return
+			
 		if self._end < self._min_size and not self._is_stop and not self._is_eof and self._exception is None:
 			await self._lock_read()
 	
@@ -80,11 +84,12 @@ class BufferStream:
 			self._read_waiter = None
 	#!enddef
 	
-	
 	async def _unlock_read(self):
 		if self._read_waiter is not None:
 			self._read_waiter.set_result(None)
-		self._read_waiter = None
+			self._read_waiter = None
+		else:
+			self._is_flushed = True
 	#!enddef
 	
 	
@@ -104,18 +109,11 @@ class BufferStream:
 	#!enddef
 	
 	
-	async def clear(self):
-		self._count_readed = 0
-		self._cur = 0
-		self._end = 0
-		self._is_stop = False
-		self._is_eof = False
-		await self._unlock_read()
-		await self._unlock_write()
-	
-	
 	async def read(self, count = -1):
 		#await asyncio.sleep(0.5)
+		
+		if self._exception != None:
+			raise self._exception
 		
 		if count == 0:
 			return bytearray([])
@@ -128,9 +126,6 @@ class BufferStream:
 		
 		await self._try_lock_read()
 		
-		if self._exception != None:
-			raise self._exception
-
 		cur = self._cur
 		end = self._end
 			
@@ -190,6 +185,9 @@ class BufferStream:
 	
 	
 	async def skip_line(self):
+		if self._exception != None:
+			raise self._exception
+		
 		while not await self.eof():
 			
 			await self._try_lock_read()
@@ -226,9 +224,9 @@ class BufferStream:
 	
 	
 	async def write_eof(self):
-		await self.flush()
-		await self._unlock_write()
 		self._is_eof = True
+		await self._unlock_read()
+		await self._unlock_write()
 	#!enddef
 	
 	
@@ -338,7 +336,7 @@ class BufferStream:
 			async def __anext__(self):
 				if self.stop:
 					raise StopAsyncIteration
-				#print (await self.stream.eof())
+				
 				if await self.stream.eof():
 					raise StopAsyncIteration
 				

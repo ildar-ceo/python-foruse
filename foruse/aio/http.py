@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
-import foruse.log as log
-
-from .streams import BufferStream, EndLineException
+from foruse import *
+from .streams import AbstractStream, EndLineException, ListStream
 
 
 class HttpPacket:
@@ -155,7 +154,8 @@ class HttpPacket:
 	
 	def remove_header(self, key):
 		key = key.lower()
-		del self._headers[key]
+		if key in self._headers:
+			del self._headers[key]
 	
 	def get_headers(self):
 		return self._headers
@@ -199,13 +199,37 @@ class HttpPacket:
 		return True
 
 	
+	def get_raw_header(self):
+		
+		crlf = "\r\n"
+		str = ""
+		
+		if self._type == HttpPacket.TYPE_REQUEST:
+			str += "%s %s %s%s" % (self._method, self._path, self._http_version, crlf)
+		
+		elif self._type == HttpPacket.TYPE_ANSWER:
+			str += "%s %s" % (self._http_version, self._status_code)
+			status_str = HttpPacket.STATUS_CODES.get(self._status_code)
+			
+			if status_str is not None:
+				str += " " + status_str
+			
+			str += crlf
+			
+		for key,value in xvalues(self._headers):
+			str += "%s: %s%s" % (key, value, crlf)
+		
+		str += crlf
+		
+		return to_byte(str)
+	
 #!endclass HttpPacket
 
 
 class HttpRequest(HttpPacket):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		
+		self._transport = kwargs.get('transport')
 		
 	async def parse(self):
 		
@@ -272,8 +296,8 @@ class HttpRequest(HttpPacket):
 			await self._body_stream.stop()
 	
 	
-	def create_answer(self):
-		answer = HttpAnswer()
+	def create_answer(self,):
+		answer = HttpAnswer(transport=self._transport)
 		
 		return answer
 	
@@ -284,59 +308,40 @@ class HttpRequest(HttpPacket):
 class HttpAnswer(HttpPacket):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-
+		
+		self._transport = kwargs.get('transport')
+		self._body_stream = ListStream()
+		self._type = HttpPacket.TYPE_ANSWER
 		self._http_version = 'HTTP/1.1'
 		self._status_code = 200
-		
-		self._body_stream = None
 	
-	
-	async def write(self, buff):
-		if self._body_stream is not None:
-			await self._body_stream.write(buff)
-	
+	def write(self, data):
+		self._body_stream.feed_data(data)
 	
 	async def send(self):
-		if self._output_stream is not None:
+	
+		if isinstance(self._body_stream, ListStream):
+			self._body_stream.feed_eof()
+		
+		if self._transport is not None:
 			
 			self.remove_header('Content-Length')
 			if self._body_stream is not None:
-				size = self._body_stream.size()
+				size = await self._body_stream.size()
 				if size != None:
 					self.set_header('Content-Length', size)
 			
-			await self._output_stream.write(self.get_raw_header())
+			self._transport.write(self.get_raw_header())
 			
 			if self._body_stream is not None:
-				self._body_stream.seek(0, AbstractStream.SEEK_SET)
+				await self._body_stream.seek(0, AbstractStream.SEEK_SET)
 				while not await self._body_stream.eof():
 					data = await self._body_stream.read(8192)
-					await self._output_stream.write(data)
+					self._transport.write(data)
+				await self._body_stream.close()
+			#!endif
 			
-			await self._output_stream.flush()
-			await self._body_stream.close()
+		#!endif
 	
 #!endclass HttpAnswer
 
-
-
-
-class HttpStream(BufferStream):
-	
-	def __init__(self, *args, **kwargs):
-		super().__init__(*args, **kwargs)
-		
-		self._type = HttpPacket.TYPE_REQUEST
-		self._state = HttpPacket.STATE_NONE
-		self._header_line_limit = 8192
-		self._content_length = 10
-		
-	async def get_request(self):
-		request = HttpRequest(input_stream=self)
-		
-		if await request.parse():
-			return request
-			
-		return None
-	
-#!endclass HttpStream	
