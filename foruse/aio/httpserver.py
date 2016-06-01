@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
+import datetime
 import asyncio.streams
 from foruse import *
 from foruse.aio import *
@@ -15,14 +16,14 @@ class HTTPServer(log.Log, asyncio.Protocol):
 		self._close = False
 		self._transport = None
 		
-		self._buffer = ListStream()
+		self._buffer = QueueStream()
 		
 		self._loop = kwargs.get('loop')
 		
 		if self._loop == None:
 			self._loop = asyncio.get_event_loop()
-		
-	
+
+			
 	def __del__(self):
 		self._log.debug2 ('--------------')
 	
@@ -35,6 +36,7 @@ class HTTPServer(log.Log, asyncio.Protocol):
 	def connection_made(self, transport):
 		self._log.debug2 ('connection_made')
 		self._transport = transport
+		self._start = datetime.datetime.now()
 		self._loop.create_task(self.start())
 		
 		
@@ -76,6 +78,7 @@ class HTTPServer(log.Log, asyncio.Protocol):
 		await answer.send()
 		self.close()
 	
+	
 	async def start(self):
 		
 		while not await self._buffer.eof():
@@ -90,8 +93,12 @@ class HTTPServer(log.Log, asyncio.Protocol):
 					if length is None:
 						self.close()
 					
+					self._end = datetime.datetime.now()
+					self._log.debug('Request = %sms' % ( (self._end - self._start).microseconds / 1000 ))
+					
 					if self._close == False:
 						await request.end()
+
 						
 				except Exception as e:
 					print (get_traceback())

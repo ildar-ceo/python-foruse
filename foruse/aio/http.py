@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 from foruse import *
-from .streams import AbstractStream, EndLineException, ListStream
+from .streams import AbstractStream, EndLineException, QueueStream
 
 
 class HttpPacket:
@@ -310,17 +310,18 @@ class HttpAnswer(HttpPacket):
 		super().__init__(*args, **kwargs)
 		
 		self._transport = kwargs.get('transport')
-		self._body_stream = ListStream()
+		self._body_stream = QueueStream()
 		self._type = HttpPacket.TYPE_ANSWER
 		self._http_version = 'HTTP/1.1'
 		self._status_code = 200
 	
 	def write(self, data):
-		self._body_stream.feed_data(data)
+		if isinstance(self._body_stream, QueueStream):
+			self._body_stream.feed_data(data)
 	
 	async def send(self):
 	
-		if isinstance(self._body_stream, ListStream):
+		if isinstance(self._body_stream, QueueStream):
 			self._body_stream.feed_eof()
 		
 		if self._transport is not None:

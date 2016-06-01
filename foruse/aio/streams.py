@@ -120,6 +120,7 @@ class AbstractStream(log.Log):
 		await self.close()
 	
 	async def close(self):
+		await self._buffer.stop()
 		await self._stop_read_loop()
 		await self._close()
 	
@@ -349,10 +350,13 @@ class FileStream(AbstractStream):
 		pass
 	
 	async def _eof(self):
-		pos = await self._tell()
-		size = await self._size()
-		return pos >= size
-	
+		if self._handle is not None:
+			pos = await self._tell()
+			size = await self._size()
+			return pos >= size
+		
+		return True
+		
 	async def _flush(self):
 		pass
 	
@@ -382,7 +386,7 @@ class FileStream(AbstractStream):
 
 
 
-class ListStream(AbstractStream):
+class QueueStream(AbstractStream):
 	
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
@@ -431,6 +435,7 @@ class ListStream(AbstractStream):
 	
 	async def _close(self):
 		self._list = []
+		self._is_eof = True
 		self._is_stop = True
 		self._unlock_read()
 	

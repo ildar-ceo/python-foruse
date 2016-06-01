@@ -15,6 +15,7 @@ CRITICAL=1
 
 LOG_LEVEL = INFO
 LOG_FORMAT = "%(date)s [%(color)s%(module)-20s] %(level)+8s: %(message)s%(nc)s"
+LOG_DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 
 TO_STR={
 	DEBUG2: 'DEBUG2',
@@ -96,7 +97,7 @@ class Logging:
 			'module': self.log_module[0:20],
 			'message': s,
 			'level': level_str,
-			'date': time.strftime(DATETIME_FORMAT),
+			'date': time.strftime(LOG_DATETIME_FORMAT),
 			'color': COLORS.get(level_color),
 			'nc': COLORS.get('nc'),
 		}

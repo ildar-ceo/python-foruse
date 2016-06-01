@@ -69,43 +69,47 @@ class BufferStream:
 	#!enddef
 
 	async def _try_lock_read(self):
+		#print ('_try_lock_read')
+		
 		if self._is_flushed:
 			self._is_flushed = False
 			return
-			
+		
 		if self._end < self._min_size and not self._is_stop and not self._is_eof and self._exception is None:
 			await self._lock_read()
 	
 	async def _lock_read(self):
-		self._read_waiter = asyncio.futures.Future(loop=self._loop)
+		if self._read_waiter is None:
+			self._read_waiter = asyncio.Event()
 		try:
-			await self._read_waiter
+			#print ('Lock Read')
+			await self._read_waiter.wait()
+			#print ('Unlock Read')
 		finally:
-			self._read_waiter = None
+			self._read_waiter.clear()
 	#!enddef
+	
 	
 	async def _unlock_read(self):
 		if self._read_waiter is not None:
-			self._read_waiter.set_result(None)
-			self._read_waiter = None
-		else:
-			self._is_flushed = True
+			self._read_waiter.set()
+			#self._read_waiter = None
 	#!enddef
 	
 	
 	async def _lock_write(self):
-		self._write_waiter = asyncio.futures.Future(loop=self._loop)
+		if self._write_waiter is None:
+			self._write_waiter = asyncio.Event()
 		try:
-			await self._write_waiter
+			await self._write_waiter.wait()
 		finally:
-			self._write_waiter = None
+			self._write_waiter.clear()
 	#!enddef
 	
 	
 	async def _unlock_write(self):
 		if self._write_waiter is not None:
-			self._write_waiter.set_result(None)
-		self._write_waiter = None
+			self._write_waiter.set()
 	#!enddef
 	
 	
@@ -126,14 +130,18 @@ class BufferStream:
 		
 		await self._try_lock_read()
 		
+		#print (count)
+
 		cur = self._cur
 		end = self._end
-			
-		self._count_readed += end - cur
-		self._cur = 0
-		self._end = 0
+		sz = end - cur
+		if sz > 0:
+			self._count_readed += end - cur
+			self._cur = 0
+			self._end = 0
 		
 		await self._unlock_write()
+		self._is_flushed = False
 		
 		return self._buffer[cur:end]
 	#!enddef
@@ -214,6 +222,7 @@ class BufferStream:
 	
 	
 	async def flush(self):
+		self._is_flushed = True
 		await self._unlock_read()
 	#!enddef
 	
