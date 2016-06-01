@@ -160,7 +160,7 @@ class HttpStream(BufferStream):
 				data = data.decode('utf-8').strip()
 				
 			except EndLineException as e:
-				self.drain_line()
+				await self.skip_line()
 				return None
 			
 			except Exception as e:
@@ -172,11 +172,14 @@ class HttpStream(BufferStream):
 			header += data + "\n"
 			
 		return header
-
 	
-	def get_body_stream(self):
+	
+	async def get_body(self):
+		return await self.read(self._content_length)
+	
+	async def get_body_stream(self):
 		if self._content_length is not None:
-			return self.read_count_stream(self._content_length)
+			return await self.get_count_stream(self._content_length)
 		return None
 	
 	

@@ -223,7 +223,14 @@ class BufferStream(AbstractStream):
 	#!enddef
 	
 	
-	async def read(self):
+	async def read(self, count = -1):
+	
+		if count == 0:
+			return []
+			
+		if count > 0:
+			return await self.read_count(count)
+	
 		if await self.eof():
 			return []
 		
@@ -244,6 +251,14 @@ class BufferStream(AbstractStream):
 		return self._buffer[cur:end]
 	#!enddef
 	
+	
+	async def read_all(self):
+		data = bytearray()
+		while not await self.eof():
+			buf = await self.read()
+			data.extend(buf)
+		
+		return data
 	
 	async def write(self, buff):
 		
@@ -276,13 +291,13 @@ class BufferStream(AbstractStream):
 	#!enddef
 
 	
-	async def drain(self):
+	async def skip(self):
 		while not await self.eof():
 			await self.read()
 	#!enddef
 	
 	
-	async def drain_line(self):
+	async def skip_line(self):
 		while not await self.eof():
 			
 			await self._try_lock_read()
@@ -390,7 +405,7 @@ class BufferStream(AbstractStream):
 	#!enddef
 	
 	
-	def read_line_stream(self, maxlen = -1):
+	async def get_line_stream(self, maxlen = -1):
 		stream = BufferStream()
 		self._loop.create_task(self._loop_read_line(stream, maxlen = -1))
 		return stream
@@ -405,13 +420,13 @@ class BufferStream(AbstractStream):
 	#!enddef
 	
 	
-	async def readline_drain(self, maxlen = -1):
+	async def readline_skip(self, maxlen = -1):
 		data = bytearray()
 		try:
 			async for cur, end in self._readline(maxlen):
 				data.extend(self._buffer[cur:end])
 		except EndLineException:
-			await self.drain_line()
+			await self.skip_line()
 			return bytearray()
 		return data
 	#!enddef
@@ -476,7 +491,7 @@ class BufferStream(AbstractStream):
 	#!enddef
 	
 	
-	def read_count_stream(self, count):
+	async def get_count_stream(self, count):
 		stream = BufferStream()
 		self._loop.create_task(self._loop_read_count(stream, count))
 		return stream
@@ -492,5 +507,3 @@ class BufferStream(AbstractStream):
 	
 	
 #!endclass BufferStream
-
-
