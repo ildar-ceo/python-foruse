@@ -2,6 +2,9 @@
 import asyncio
 import foruse.log as log
 from .fs import LocalFS
+from .buffer import BufferStream
+from foruse import *
+
 
 _local_fs = LocalFS()
 
@@ -13,11 +16,22 @@ class EndLineException(Exception):
 #!endclass EndLineException
 
 
+class IOException(Exception):
+	def __init__(self, value):
+		self.value = value
+		
+	def __str__(self):
+		return self.value
+		
+#!endclass EndLineException
+
+
 class EofException(Exception):
 	def __str__(self):
 		return "End of stream"
 		
 #!endclass EndLineException
+
 
 
 class AbstractStream(log.Log):
@@ -39,36 +53,226 @@ class AbstractStream(log.Log):
 		self._loop = kwargs.get('loop')
 		if self._loop == None:
 			self._loop = asyncio.get_event_loop()
-	
-	
-	async def open(self):
-		pass
-	
-	async def read(self, max_size=1024):
-		pass
-	
-	async def write(self, buf):
-		pass
+			
+		self._buffer = BufferStream(max_size=kwargs.get('max_size'), min_size=kwargs.get('min_size'))
 		
-	async def close(self):
-		pass
-
-	async def flush(self):
+		self._chunk_size = kwargs.get('chunk_size', 8192)
+		self._read_loop_waiter = None
+		self._start_seek = 0
+		
+		
+	def seekable(self):
+		return False
+	
+	def writable(self):
+		return False
+	
+	def readable(self):
+		return False
+	
+	# -----------------------------------------------------------------------------
+	#                           Abstract Stream Functions
+	# -----------------------------------------------------------------------------
+	
+	async def _open(self):
+		return False
+	
+	async def _close(self):
 		pass
 	
-	async def eof(self):
+	async def _read(self, count=-1):
+		pass
+	
+	async def _write(self, buf):
+		pass
+	
+	async def _seek(self, offset, whence):
+		pass
+	
+	async def _tell(self):
+		return 0
+	
+	async def _size(self):
+		return None
+	
+	async def _eof(self):
 		return True
 	
-	async def get_size(self):
-		return 0
-	
-	async def get_pos(self):
-		return 0
-	
-	async def close(self):
+	async def _flush(self):
 		pass
 	
-#!endclass AbstreactStream
+	# -----------------------------------------------------------------------------
+	#                               Stream Functions
+	# -----------------------------------------------------------------------------
+	
+	async def open(self):
+		return await self._open()
+	
+	async def close(self):
+		await self._stop_read_loop()
+		await self._close()
+	
+	async def eof(self):
+		if self._read_loop_waiter is not None:
+			pos = await self.tell()
+			size = await self.size()
+			return pos >= size
+		else:
+			return await self._eof()
+	
+	async def flush(self):
+		await self._flush()
+	
+	async def size(self):
+		return await self._size()
+	
+	async def seek(self, offset, whence = SEEK_SET):
+		await self._stop_read_loop()
+		await self._seek(offset, whence)
+		self._start_seek = await self._tell()
+	
+	async def tell(self):
+		if self._read_loop_waiter is not None:
+			return self._start_seek + self._buffer._count_readed
+		else:
+			return await self._tell()
+		
+	# -----------------------------------------------------------------------------
+	#                               Write To Stream
+	# -----------------------------------------------------------------------------
+	
+	async def write(self, buff):
+		if self.writable():
+			await self._stop_read_loop()
+			await self._write(buff)
+		
+		else:
+			raise IOException("Write to unwritable stream")
+	#!enddef write
+	
+	
+	# -----------------------------------------------------------------------------
+	#                               Read From Stream
+	# -----------------------------------------------------------------------------
+	
+	async def _loop_read(self):
+		self._read_loop_waiter = asyncio.futures.Future(loop=self._loop)
+		
+		try:
+			while not self._buffer.is_stop() and not await self._eof():
+				data = await self._read(self._chunk_size)
+				if len(data) > 0:
+					await self._buffer.write(data)
+				
+		except Exception as e:
+			#print (e)
+			self._buffer.set_exception(e)
+		
+		await self._buffer.stop()
+		self._read_loop_waiter.set_result(None)
+	#!enddef
+	
+	
+	async def _start_read_loop(self):
+		if self._read_loop_waiter is None:
+			await self._buffer.clear()
+			self._loop.create_task(self._loop_read())
+	#!enddef
+	
+	
+	async def _stop_read_loop(self):
+		await self._buffer.stop()
+		if self._read_loop_waiter is not None:
+			await self._read_loop_waiter
+			self._read_loop_waiter = None
+	#!enddef
+	
+	
+	async def get_read_buffer():
+		if self.readable():
+			await self._start_read_loop()
+			return self._buffer
+			
+		else:
+			raise IOException("Read from unreadable stream")
+		
+		return None
+	#!enddef
+	
+		
+	async def read(self, count=0):
+		try:
+			count = int(count)
+		except:
+			count = None
+			
+		if count <= 0 or count is None:
+			count = self._chunk_size
+		
+		if self.readable():
+			await self._start_read_loop()
+			return await self._buffer.read(count)
+			
+		else:
+			raise IOException("Read from unreadable stream")
+	#!enddef read
+	
+	
+	async def skip(self):
+		if self.readable():
+			await self._start_read_loop()
+			await self._buffer.skip()
+		else:
+			raise IOException("Read from unreadable stream")
+	#!enddef skip
+	
+	
+	async def skip_line(self):
+		if self.readable():
+			await self._start_read_loop()
+			await self._buffer.skip_line()
+		else:
+			raise IOException("Read from unreadable stream")
+	#!enddef skip_line
+	
+	
+	async def get_line_stream(self):
+		if self.readable():
+			await self._start_read_loop()
+			return await self._buffer.get_line_stream()
+		else:
+			raise IOException("Read from unreadable stream")
+	#!enddef get_line_stream
+	
+	
+	async def readline(self):
+		if self.readable():
+			await self._start_read_loop()
+			return await self._buffer.readline()
+		else:
+			raise IOException("Read from unreadable stream")
+	#!enddef readline
+	
+	
+	async def readline_skip(self):
+		if self.readable():
+			await self._start_read_loop()
+			return await self._buffer.readline_skip()
+		else:
+			raise IOException("Read from unreadable stream")
+	#!enddef readline_skip
+	
+	
+	async def get_count_stream(self):
+		if self.readable():
+			await self._start_read_loop()
+			return await self._buffer.get_count_stream()
+		else:
+			raise IOException("Read from unreadable stream")
+	#!enddef get_count_stream
+	
+
+#!endclass AbstractStream
 
 
 
@@ -85,425 +289,131 @@ class FileStream(AbstractStream):
 		if self._fs is None:
 			self._fs = _local_fs
 		
-		self._size = 0
-		self._pos = 0
+		self._size_hash = 0
+		self._pos_hash = 0
 		
 		self._size_dirty = True
 		self._pos_dirty = True
-
-		
-	async def open(self):
+	
+	def seekable(self):
+		return True
+	
+	def writable(self):
+		return True
+	
+	def readable(self):
+		return True
+	
+	async def _open(self):
 		if self._handle is not None:
 			await self.close()
 	
 		if await self._fs.file_exists(self._file_name):
-			self._size = await self._fs.file_size(self._file_name)
+			self._size_hash = await self._fs.file_size(self._file_name)
 			self._handle = await self._fs.file_open(self._file_name, self._mode)
 		else:
 			self._handle = None
 		
 		return self._handle is not None
 	
-	async def read(self, max_size=1024):
-		data = await self._fs.file_read(self._handle, max_size)
-		self._pos_dirty = True
-		return data
-
-	async def write(self, buf):
-		await self._fs.file_write(self._handle, buf)
-		self._pos_dirty = True
-		self._size_dirty = True
-		return data
-
-	async def close(self):
-		await self._fs.file_close(self._handle)
+	async def _close(self):
+		if self._handle is not None:
+			await self._fs.file_close(self._handle)
 		self._handle = None
 	
-	async def eof(self):
-		pos = await self.get_pos()
-		size = await self.get_size()
+	async def _read(self, count=-1):
+		data = []
+		if self._handle is not None:
+			data = await self._fs.file_read(self._handle, count)
+			self._pos_dirty = True
+		return data
+	
+	async def _write(self, buf):
+		if self._handle is not None:
+			await self._fs.file_write(self._handle, buf)
+			self._pos_dirty = True
+			self._size_dirty = True
+	
+	async def _seek(self, offset, whence):
+		pass
+	
+	async def _eof(self):
+		pos = await self._tell()
+		size = await self._size()
 		return pos >= size
 	
-	async def get_size(self):
-		if self._size_dirty:
-			await self.update_size()
-		return self._size
+	async def _flush(self):
+		pass
 	
-	async def get_pos(self):
+	async def _tell(self):
 		if self._pos_dirty:
-			await self.update_pos()
-		return self._pos
+			await self._update_pos()
+		return self._pos_hash
 	
-	async def update_pos(self):
-		self._pos = await self._fs.file_pos(self._handle)
-		self._pos_dirty = False
-		return self._pos
+	async def _size(self):
+		if self._size_dirty:
+			await self._update_size()
+		return self._size_hash
+	
+	async def _update_pos(self):
+		if self._handle is not None:
+			self._pos_hash = await self._fs.file_pos(self._handle)
+			self._pos_dirty = False
+		return self._pos_hash
 		
-	async def update_size(self):
-		self._size = await self._fs.file_size(self._file_name)
-		self._size_dirty = False
-		return self._size
+	async def _update_size(self):
+		if self._handle is not None:
+			self._size_hash = await self._fs.file_size(self._file_name)
+			self._size_dirty = False
+		return self._size_hash
 	
 #!endclass FileStream
 
 
 
-class BufferStream(AbstractStream):
+class ListStream(AbstractStream):
 	
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
+		self._list = []
+		self._pos = 0
 		
-		self._max_size = kwargs.get('max_size', 3) # 16384
-		self._min_size = kwargs.get('min_size', 1) # 1024
-		self._is_eof = False
-		self._is_close = False
+	def seekable(self):
+		return True
+	
+	def writable(self):
+		return False
+	
+	def readable(self):
+		return True
+	
+	async def _open(self):
+		return True
+	
+	async def _close(self):
+		self._pos = len(self._list)
+	
+	async def _read(self, count=-1):
+		pos = self._pos
+		self._pos+=1
+		return self._list[pos]
+	
+	async def _write(self, buf):
+		self._list.append(buf)
+	
+	async def _seek(self, offset, whence):
+		self._pos = 0
+	
+	async def _tell(self):
+		return 0
+	
+	async def _size(self):
+		return None
+	
+	async def _eof(self):
+		return self._pos >= len(self._list)
+	
+	async def _flush(self):
+		pass
 		
-		self._buffer = bytearray(self._max_size)
-		self._cur = 0
-		self._end = 0
-		self._count_readed = 0
-		
-		self._write_waiter = None
-		self._read_waiter = None
-		self._exception = None
-	#!enddef
-	
-	def set_exception(self, e):
-		self._exception = e
-	
-	def is_close(self):
-		return self._is_close
-	
-	def get_buffer(self):
-		return self._buffer[self._cur:self._end]
-	
-	async def close(self):
-		self._is_close = True
-		self._is_eof = True
-		await self._unlock_read()
-		await self._unlock_write()
-	
-	async def get_pos(self):
-		return self._count_readed
-	#!enddef
-
-	async def _try_lock_read(self):
-		if self._end < self._min_size and not self._is_close and not self._is_eof and self._exception is None:
-			await self._lock_read()
-	
-	async def _lock_read(self):
-		self._read_waiter = asyncio.futures.Future(loop=self._loop)
-		try:
-			await self._read_waiter
-		finally:
-			self._read_waiter = None
-	#!enddef
-	
-	
-	async def _unlock_read(self):
-		if self._read_waiter is not None:
-			self._read_waiter.set_result(None)
-		self._read_waiter = None
-	#!enddef
-	
-	
-	async def _lock_write(self):
-		self._write_waiter = asyncio.futures.Future(loop=self._loop)
-		try:
-			await self._write_waiter
-		finally:
-			self._write_waiter = None
-	#!enddef
-	
-	
-	async def _unlock_write(self):
-		if self._write_waiter is not None:
-			self._write_waiter.set_result(None)
-		self._write_waiter = None
-	#!enddef
-	
-	
-	async def read(self, count = -1):
-	
-		if count == 0:
-			return []
-			
-		if count > 0:
-			return await self.read_count(count)
-	
-		if await self.eof():
-			return []
-		
-		await self._try_lock_read()
-		
-		if self._exception != None:
-			raise self._exception
-
-		cur = self._cur
-		end = self._end
-			
-		self._count_readed += end - cur
-		self._cur = 0
-		self._end = 0
-		
-		await self._unlock_write()
-		
-		return self._buffer[cur:end]
-	#!enddef
-	
-	
-	async def read_all(self):
-		data = bytearray()
-		while not await self.eof():
-			buf = await self.read()
-			data.extend(buf)
-		
-		return data
-	
-	async def write(self, buff):
-		
-		if self.is_close():
-			return
-	
-		buff_size = len(buff)
-		buff_pos = 0
-		
-		while buff_size - buff_pos > 0 and not self._is_close:
-			free_size = self._max_size - self._end
-			count = buff_size - buff_pos
-			
-			if count > free_size:
-				count = free_size
-			
-			if count > 0:
-				self._buffer[self._end:self._end+count] = buff[buff_pos:buff_pos+count]
-				
-				buff_pos += count
-				self._end += count
-			
-			if self._end >= self._min_size:
-				await self._unlock_read()
-			
-			if self._end >= self._max_size:
-				await self._lock_write()
-			
-		#!endwhile		
-	#!enddef
-
-	
-	async def skip(self):
-		while not await self.eof():
-			await self.read()
-	#!enddef
-	
-	
-	async def skip_line(self):
-		while not await self.eof():
-			
-			await self._try_lock_read()
-			
-			cur = self._cur
-			end = self._end
-			
-			pos_n = self._buffer.find(b'\n', self._cur)
-			
-			if pos_n == -1 or pos_n >= end:
-				self._count_readed += end - cur
-				self._cur = 0
-				self._end = 0
-				await self._unlock_write()
-			
-			else:
-				self._count_readed += pos_n - cur + 1
-				self._cur = pos_n + 1
-				self._end = end
-				break
-				
-		#!endwhile
-	#!enddef
-	
-	
-	async def flush(self):
-		await self._unlock_read()
-	#!enddef	
-	
-	
-	async def eof(self):
-		return self._is_eof and self._cur == 0
-	#!enddef
-	
-	
-	async def write_eof(self):
-		await self.flush()
-		await self._unlock_write()
-		self._is_eof = True
-	#!enddef
-	
-	
-	def _readline(self, maxlen = -1):
-		
-		class f:
-			def __init__(self, stream, maxlen):
-				self.stop = False
-				self.stream = stream
-				self.maxlen = maxlen
-				self.count_readed = 0
-		
-			async def __aiter__(self):
-				return self
-
-			async def __anext__(self):
-				if self.stop:
-					raise StopAsyncIteration
-				
-				if await self.stream.eof():
-					raise StopAsyncIteration
-				
-				if self.count_readed > self.maxlen and self.maxlen != -1:
-					raise EndLineException
-				
-				await self.stream._try_lock_read()
-				
-				cur = self.stream._cur
-				end = self.stream._end
-				pos_n = self.stream._buffer.find(b'\n', self.stream._cur)
-				
-				if pos_n >= self.maxlen and self.maxlen != -1:
-					raise EndLineException
-				
-				if pos_n == -1 or pos_n >= end:
-					self.count_readed += end - cur
-					self.stream._count_readed += end - cur
-					self.stream._cur = 0
-					self.stream._end = 0
-					await self.stream._unlock_write()
-					return (cur, end)
-				
-				else:
-					self.count_readed += pos_n - cur + 1
-					self.stream._count_readed += pos_n - cur + 1
-					self.stream._cur = pos_n+1
-					self.stream._end = end
-					self.stop = True
-					return (cur, pos_n)
-			
-			#!enddef __anext__
-			
-		#!endclass f
-		
-		return f(self, maxlen)
-	#!enddef
-	
-	
-	async def _loop_read_line(self, out_stream, maxlen = -1):
-		try:
-			async for cur, end in self._readline(maxlen = -1):
-				await out_stream.write(self._buffer[cur:end])
-		except Exception as e:
-			out_stream.set_exception(e)
-		await out_stream.close()
-	#!enddef
-	
-	
-	async def get_line_stream(self, maxlen = -1):
-		stream = BufferStream()
-		self._loop.create_task(self._loop_read_line(stream, maxlen = -1))
-		return stream
-	#!enddef
-	
-	
-	async def readline(self, maxlen = -1):
-		data = bytearray()
-		async for cur, end in self._readline(maxlen):
-			data.extend(self._buffer[cur:end])
-		return data
-	#!enddef
-	
-	
-	async def readline_skip(self, maxlen = -1):
-		data = bytearray()
-		try:
-			async for cur, end in self._readline(maxlen):
-				data.extend(self._buffer[cur:end])
-		except EndLineException:
-			await self.skip_line()
-			return bytearray()
-		return data
-	#!enddef
-	
-	
-	def _read_count(self, count):
-		class f:
-			def __init__(self, stream, count):
-				self.stop = False
-				self.stream = stream
-				self.count = count
-				self.count_readed = 0
-		
-			async def __aiter__(self):
-				return self
-
-			async def __anext__(self):
-				if self.stop:
-					raise StopAsyncIteration
-				
-				if await self.stream.eof():
-					raise StopAsyncIteration
-				
-				if self.count_readed >= self.count:
-					raise StopAsyncIteration
-				
-				await self.stream._try_lock_read()
-				
-				cur = self.stream._cur
-				end = self.stream._end
-				left = self.count - self.count_readed
-				
-				if cur + left < end:
-					self.count_readed = self.count
-					self.stream._cur = cur + left
-					self.stream._end = end
-					self.stream._count_readed += left
-					return self.stream._buffer[cur:cur + left]
-					
-				else:
-					self.count_readed += end - cur
-					self.stream._count_readed += end - cur
-					self.stream._cur = 0
-					self.stream._end = 0
-					await self.stream._unlock_write()
-					return self.stream._buffer[cur:end]
-			#!enddef __anext__
-			
-		#!endclass f
-		
-		return f(self, count)
-	#!enddef
-	
-	
-	async def _loop_read_count(self, out_stream, count):
-		try:
-			async for data in self._read_count(count):
-				await out_stream.write(data)
-		except Exception as e:
-			out_stream.set_exception(e)
-		await out_stream.close()
-	#!enddef
-	
-	
-	async def get_count_stream(self, count):
-		stream = BufferStream()
-		self._loop.create_task(self._loop_read_count(stream, count))
-		return stream
-	#!enddef
-	
-	
-	async def read_count(self, count):
-		buff = bytearray()
-		async for data in self._read_count(count):
-			buff.extend(data)
-		return buff
-	#!enddef
-	
-	
-#!endclass BufferStream
+#!endclass MemoryStream	

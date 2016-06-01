@@ -81,64 +81,243 @@ class HttpPacket:
 		511:"Network Authentication Required",
 	}
 	
-	def __init__(self):
-		self.method = None
-		self.path = None
-		self.version = None
-		self.code = None
-		self.type = None
+	
+	def __init__(self, *args, **kwargs):
+		self._body = None
+		self._headers = {}
+		self._output_stream = kwargs.get('output_stream')
+		self._input_stream = kwargs.get('input_stream')
+		self._body_stream = None
+		self._type = None
+		self._state = HttpPacket.STATE_NONE
+		self._header_line_limit = 8192
+		
+		self._method = None
+		self._path = None
+		self._http_version = None
+		self._status_code = None
+		
 		self.headers = {}
+	#!enddef __init__
 	
-	def parse_request(self, line):
-		self.type = Const.TYPE_REQUEST
-		try:
-			(self.method, self.path, self.version) = line.split()
-		except:
-			pass
 	
-	def parse_answer(self, line):
-		self.type = Const.TYPE_ANSWER
-		try:
-			arr = line.split()
-			self.version = arr[0]
-			self.code = arr[1]
-		except:
-			pass
+	def set_body_stream(self, stream):
+		self._body_stream = stream
 	
-	def parse_header(self, line):
-		try:
-			(key, value) = line.split(':')
-			ukey = key.strip().lower()
-			value = value.strip()
-			self.headers[ukey]=(key,value)
-		except:
-			pass
+	def get_body_stream(self, stream):
+		return self._body_stream
+		
+	def get_path(self):
+		return self._path
 	
-	def get_raw_header(self):
-		
-		crlf = b"\r\n"
-		data = b""
-		
-		if self.type == Const.TYPE_REQUEST:
-			data += to_byte(self.method) + b" " +  to_byte(self.path) + b" " +  to_byte(self.version) + crlf
-		elif self.type == Const.TYPE_ANSWER:
-			data += to_byte(self.version) + b" " +  to_byte(self.code) + crlf
-			
-		for key,value in xvalues(self.headers):
-			data += to_byte(key) + b": " + to_byte(value) + crlf
-		
-		data += crlf
-		
-		return data
+	def set_path(self, value):
+		self._path = value
+	
+	def get_method(self):
+		return self._method
+	
+	def set_method(self, value):
+		self._method = value
+	
+	def get_http_version(self):
+		return self._http_version
+	
+	def set_http_version(self, value):
+		self._http_version = value
+	
+	def get_version(self):
+		return self._http_version
+	
+	def set_version(self, value):
+		self._http_version = value
+	
+	def get_status_code(self):
+		return self._status_code
+	
+	def set_status_code(self, value):
+		self._status_code = int(value)
+	
+	async def close(self):
+		if self._body_stream is not None:
+			await self._body_stream.skip()
+			await self._body_stream.close()
+	
+	def set_header(self, key, value):
+		ukey = key.lower()
+		self._headers[ukey] = (key, value)
 	
 	def get_header(self, key, default=None):
 		key = key.lower()
-		val = self.headers.get(key)
+		val = self._headers.get(key)
 		if val is None:
 			return default
 		return val[1]
 	
+	def remove_header(self, key):
+		key = key.lower()
+		del self._headers[key]
+	
+	def get_headers(self):
+		return self._headers
+	
+	def get_body(self):
+		return self._body_stream
+	
+	def parse_request(self, line):
+		self._type = HttpPacket.TYPE_REQUEST
+		try:
+			(self._method, self._path, self._http_version) = line.split()
+		except:
+			return False
+		
+		if self._method in ['GET', 'PUT', 'POST', 'DELETE', 'HEAD', 'OPTIONS', 'PATCH', 'TRACE', 'CONNECT']:
+			return True
+			
+		return False
+	
+	def parse_answer(self, line):
+		self.type = HttpPacket.TYPE_ANSWER
+		try:
+			arr = line.split()
+			self._http_version = arr[0]
+			self._status_code = arr[1]
+		except:
+			return False
+		
+		return True
+	
+	def parse_header(self, line):
+		try:
+			(key, value) = line.split(':', 1)
+			ukey = key.strip().lower()
+			value = value.strip()
+			self._headers[ukey]=(key,value)
+		except Exception as e:
+			print (e)
+			return False
+		
+		return True
+
+	
 #!endclass HttpPacket
+
+
+class HttpRequest(HttpPacket):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		
+		
+	async def parse(self):
+		
+		if self._input_stream is None:
+			return False
+		
+		if self._state != HttpPacket.STATE_NONE:
+			return False
+		
+		self._state = HttpPacket.STATE_INIT
+		
+		while not await self._input_stream.eof():
+			
+			try:
+				line = await self._input_stream.readline(self._header_line_limit)
+				line = line.decode('utf-8').strip()
+			
+			except EndLineException as e:
+				await self.skip_line()
+				return False
+			
+			except Exception as e:
+				return False
+			
+			if len(line) == 0:
+				break
+			
+			if self._state == HttpPacket.STATE_INIT:
+				if not self.parse_request(line):
+					return False
+				self._state = HttpPacket.STATE_HEADER
+			
+			elif self._state == HttpPacket.STATE_HEADER:
+				if not self.parse_header(line):
+					return False
+			
+		#!endwhile
+		
+		if self._state == HttpPacket.STATE_INIT:
+			return False
+		
+		length = self.get_header('Content-Length')
+		#print (length)
+		
+		if length is not None:
+			self._body_stream = await self._input_stream.get_count_stream(length)
+			
+		
+		return True
+	#!enddef parse
+	
+	
+	async def stop(self):
+		if self._input_stream is not None:
+			self._input_stream.stop()
+		
+		if self._body_stream is not None:
+			self._body_stream.stop()
+			
+	
+	async def end(self):
+		if self._body_stream is not None:
+			await self._body_stream.skip()
+			await self._body_stream.stop()
+	
+	
+	def create_answer(self):
+		answer = HttpAnswer()
+		
+		return answer
+	
+#!endclass HttpRequest
+
+
+
+class HttpAnswer(HttpPacket):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		self._http_version = 'HTTP/1.1'
+		self._status_code = 200
+		
+		self._body_stream = None
+	
+	
+	async def write(self, buff):
+		if self._body_stream is not None:
+			await self._body_stream.write(buff)
+	
+	
+	async def send(self):
+		if self._output_stream is not None:
+			
+			self.remove_header('Content-Length')
+			if self._body_stream is not None:
+				size = self._body_stream.size()
+				if size != None:
+					self.set_header('Content-Length', size)
+			
+			await self._output_stream.write(self.get_raw_header())
+			
+			if self._body_stream is not None:
+				self._body_stream.seek(0, AbstractStream.SEEK_SET)
+				while not await self._body_stream.eof():
+					data = await self._body_stream.read(8192)
+					await self._output_stream.write(data)
+			
+			await self._output_stream.flush()
+			await self._body_stream.close()
+	
+#!endclass HttpAnswer
+
 
 
 
@@ -147,40 +326,17 @@ class HttpStream(BufferStream):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		
+		self._type = HttpPacket.TYPE_REQUEST
 		self._state = HttpPacket.STATE_NONE
 		self._header_line_limit = 8192
 		self._content_length = 10
 		
-	
-	async def read_header(self):
-		header = ""
-		while not await self.eof():
-			try:
-				data = await self.readline(self._header_line_limit)
-				data = data.decode('utf-8').strip()
-				
-			except EndLineException as e:
-				await self.skip_line()
-				return None
+	async def get_request(self):
+		request = HttpRequest(input_stream=self)
+		
+		if await request.parse():
+			return request
 			
-			except Exception as e:
-				return None
-			
-			if len(data) == 0:
-				break
-			
-			header += data + "\n"
-			
-		return header
-	
-	
-	async def get_body(self):
-		return await self.read(self._content_length)
-	
-	async def get_body_stream(self):
-		if self._content_length is not None:
-			return await self.get_count_stream(self._content_length)
 		return None
-	
 	
 #!endclass HttpStream	
