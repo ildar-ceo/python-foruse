@@ -4,8 +4,7 @@ import asyncio
 
 from .fs import *
 from .streams import *
-from .http import *
-from .httpserver import *
+from .connection import *
 
 
 def call_later(time, func):

@@ -19,7 +19,6 @@ class HTTPServer(log.Log, asyncio.Protocol):
 		self._buffer = QueueStream()
 		
 		self._loop = kwargs.get('loop')
-		
 		if self._loop == None:
 			self._loop = asyncio.get_event_loop()
 

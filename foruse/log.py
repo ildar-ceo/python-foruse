@@ -5,6 +5,7 @@ from .colors import colorf, COLORS
 from .datelib import *
 from .lib import *
 
+DEBUG3=7
 DEBUG2=6
 DEBUG1=5
 DEBUG=5
@@ -18,6 +19,7 @@ LOG_FORMAT = "%(date)s [%(color)s%(module)-20s] %(level)+8s: %(message)s%(nc)s"
 LOG_DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 
 TO_STR={
+	DEBUG3: 'DEBUG3',
 	DEBUG2: 'DEBUG2',
 	DEBUG: 'DEBUG',
 	INFO: 'INFO',
@@ -27,6 +29,7 @@ TO_STR={
 }
 
 FROM_STR={
+	'DEBUG3': DEBUG3,
 	'DEBUG2': DEBUG2,
 	'DEBUG1': DEBUG,
 	'DEBUG': DEBUG,
@@ -37,6 +40,7 @@ FROM_STR={
 }
 
 LOG_COLORS = {
+	DEBUG3: 'b_cyan',
 	DEBUG2: 'b_cyan',
 	DEBUG: 'b_cyan',
 	INFO: 'b_blue',
@@ -62,6 +66,9 @@ class Logging:
 		self.log_module = kwargs.get('log_module', 'Main')
 	
 	def set_module(self, name):
+		self.log_module = name
+	
+	def set_name(self, name):
 		self.log_module = name
 	
 	def set_level(self, level):
@@ -110,7 +117,10 @@ class Logging:
 		
 	def debug2(self, s, *args, **kwargs):
 		self.log(s, *args, level=DEBUG2, **kwargs)
-		
+	
+	def debug3(self, s, *args, **kwargs):
+		self.log(s, *args, level=DEBUG3, **kwargs)
+	
 	def info(self, s, *args, **kwargs):
 		self.log(s, *args, level=INFO, **kwargs)
 		
