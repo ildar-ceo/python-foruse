@@ -33,6 +33,7 @@ class HTTPServer(log.Log, asyncio.Protocol):
 		self._buffer.feed_eof()
 		self._transport.close()
 		
+		
 	def connection_made(self, transport):
 		self._log.debug2 ('connection_made')
 		self._transport = transport
@@ -90,8 +91,8 @@ class HTTPServer(log.Log, asyncio.Protocol):
 					await answer.send()
 					
 					length = answer.get_header('Content-Length')
-					if length is None:
-						self.close()
+					#if length is None:
+					self.close()
 					
 					self._end = datetime.datetime.now()
 					self._log.debug('Request = %sms' % ( (self._end - self._start).microseconds / 1000 ))
