@@ -21,7 +21,7 @@ async def connect():
 	if answer:
 		body = answer.get_body_stream()
 		
-		body._log.set_level('DEBUG3')
+		#body._log.set_level('DEBUG3')
 		while not await body.eof():
 			data = await body.read()
 			print (data)

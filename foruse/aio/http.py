@@ -81,6 +81,12 @@ class HttpPacket(log.Log):
 		511:"Network Authentication Required",
 	}
 	
+	def is_status_code_body_exists(self):
+		return self._status_code in [200, 206, 207, 226]
+	
+	def is_status_code_success(self):
+		return self._status_code>=200 and self._status_code<=299
+	
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		
@@ -345,7 +351,7 @@ class HttpPacket(log.Log):
 		
 		if isinstance(self, HttpAnswer):
 			
-			if self._status_code == 200:
+			if self.is_status_code_body_exists():
 				# Todo: здесь нужен http body stream на основе input stream
 				# Также нужно проверить код, что body Идет по частям
 				# В противном случае, _body_stream создавать, если packet является ответом
@@ -415,9 +421,9 @@ class HttpAnswer(HttpPacket):
 
 class HTTPServer(TCPConnection):
 	
-	async def handle_error(self, request, code):
-		
-		answer = request.create_answer()
+	async def create_error_answer(self, code):
+	
+		answer = self.create_answer()
 		answer.set_header('Content-type', 'text/html')
 		#answer.set_header('Connection', 'close')
 		
@@ -429,9 +435,13 @@ class HTTPServer(TCPConnection):
 		answer.write(to_byte('<h1><center>' + message + '</center></h1>'))
 		answer.write_eof()
 		
+		return answer
+	
+	
+	async def handle_error(self, code):
+		answer = self.create_error_answer(code)
 		answer.set_transport(self._transport)
 		await answer.send()
-		
 		self.close()
 		
 	
@@ -470,7 +480,6 @@ class HTTPServer(TCPConnection):
 						await answer.send()
 						
 						self._end_request = datetime.datetime.now()
-						
 						await self.handle_request_end(request, answer)
 						
 						length = answer.get_header('Content-Length')
@@ -478,16 +487,20 @@ class HTTPServer(TCPConnection):
 							self.close()
 							return 
 						
+						if not answer.is_status_code_success():
+							self.close()
+							return 
+						
 						if self._close == False:
 							await request.parse_end()
 						
 					else:
-						await self.handle_error(request, 502)
+						await self.handle_error(502)
 						
 					
 				except Exception as e:
 					print (get_traceback())
-					await self.handle_error(request, 502)
+					await self.handle_error(502)
 			
 			else:
 				self.close()

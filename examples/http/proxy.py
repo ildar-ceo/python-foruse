@@ -28,22 +28,26 @@ class ProxyServer(HTTPServer):
 	async def handle_request(self, request):
 		self._log.debug3 ('handle_request')
 		
-		#request.set_header('Connection', 'close')
-		request.set_header('Host', 'bayrell.org')
-		
-		self.client = await MyClient.connect('bayrell.org', 80)
-		
-		reader = self.client.get_reader()
-		#reader._log.set_level('DEBUG3');
-		
-		await self.client.send_request(request)
-		answer = await self.client.get_answer()
-		
-		if answer != None:
-			answer.delete_header('Connection')
-			return answer
+		try:
+			#request.set_header('Connection', 'close')
+			request.set_header('Host', 'bayrell.org')
 			
-		return None
+			self.client = await MyClient.connect('bayrell.org', 80)
+			
+			reader = self.client.get_reader()
+			#reader._log.set_level('DEBUG3');
+			
+			await self.client.send_request(request)
+			answer = await self.client.get_answer()
+			
+			if answer != None:
+				answer.delete_header('Connection')
+				return answer
+			
+		except:
+			return await self.create_error_answer(504)
+
+		return None		
 
 #!ProxyServer
 
