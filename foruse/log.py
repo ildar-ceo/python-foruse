@@ -15,7 +15,8 @@ ERROR=2
 CRITICAL=1
 
 LOG_LEVEL = INFO
-LOG_FORMAT = "%(date)s [%(color)s%(module)-20s] %(level)+8s: %(message)s%(nc)s"
+LOG_FORMAT = "%(date)s %(color)s%(level)-8s %(module)+20s: %(message)s%(nc)s"
+#LOG_FORMAT = "%(date)s [%(color)s%(module)-20s] %(level)+8s: %(message)s%(nc)s"
 LOG_DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 
 TO_STR={

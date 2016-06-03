@@ -20,6 +20,7 @@ class MyServer(HTTPServer):
 		answer.set_header('Content-type', 'text/html')
 		#answer.set_header('Connection', 'close')
 		answer.write(b'Hello world!!!')
+		answer.write_eof()
 		
 		return answer
 #!MyServer

@@ -5,7 +5,7 @@ from .connection import TCPConnection
 from .streams import AbstractStream, EndLineException, QueueStream
 
 
-class HttpPacket:
+class HttpPacket(log.Log):
 	
 	TYPE_REQUEST = 1
 	TYPE_ANSWER = 2
@@ -82,11 +82,13 @@ class HttpPacket:
 	}
 	
 	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		
 		self._body = None
 		self._headers = {}
 		self._transport = kwargs.get('transport')
 		self._input_stream = kwargs.get('input_stream')
-		self._body_stream = QueueStream()
+		self._body_stream = None
 		self._type = None
 		self._state = HttpPacket.STATE_NONE
 		self._header_line_limit = 8192
@@ -167,6 +169,12 @@ class HttpPacket:
 		if key in self._headers:
 			del self._headers[key]
 	
+	def delete_header(self, key):
+		self.remove_header(key)
+	
+	def del_header(self, key):
+		self.remove_header(key)
+	
 	def get_headers(self):
 		return self._headers
 	
@@ -193,7 +201,7 @@ class HttpPacket:
 		try:
 			arr = line.split()
 			self._http_version = arr[0]
-			self._status_code = arr[1]
+			self._status_code = int(arr[1])
 		except:
 			return False
 		
@@ -248,13 +256,20 @@ class HttpPacket:
 	#!enddef write
 	
 	
-	async def send(self):
-	
+	def write_eof(self):
 		if isinstance(self._body_stream, QueueStream):
 			self._body_stream.feed_eof()
+	#!enddef write_eof
+	
+	
+	async def send(self):
 		
 		if self._transport is not None:
 			
+			addr = self._transport.get_extra_info('peername')
+			#print (addr)
+			self._log.debug3('Send packet to %s:%s ' % addr)
+				
 			self.remove_header('Content-Length')
 			if self._body_stream is not None:
 				size = await self._body_stream.size()
@@ -263,10 +278,11 @@ class HttpPacket:
 			
 			self._transport.write(self.get_raw_header())
 			
+			#print ('_body_stream = ' + str(self._body_stream))
 			if self._body_stream is not None:
-				await self._body_stream.seek(0, AbstractStream.SEEK_SET)
 				while not await self._body_stream.eof():
 					data = await self._body_stream.read(8192)
+					print (data)
 					self._transport.write(data)
 				await self._body_stream.close()
 			#!endif
@@ -276,6 +292,8 @@ class HttpPacket:
 	
 	
 	async def parse(self):
+		
+		self._body_stream = None
 		
 		if self._input_stream is None:
 			return False
@@ -290,7 +308,7 @@ class HttpPacket:
 			try:
 				line = await self._input_stream.readline(self._header_line_limit)
 				line = line.decode('utf-8').strip()
-			
+				
 			except EndLineException as e:
 				await self.skipline()
 				return False
@@ -302,8 +320,15 @@ class HttpPacket:
 				break
 			
 			if self._state == HttpPacket.STATE_INIT:
-				if not self.parse_request(line):
-					return False
+				
+				if self._type == HttpPacket.TYPE_REQUEST:
+					if not self.parse_request(line):
+						return False
+						
+				if self._type == HttpPacket.TYPE_ANSWER:
+					if not self.parse_answer(line):
+						return False
+						
 				self._state = HttpPacket.STATE_HEADER
 			
 			elif self._state == HttpPacket.STATE_HEADER:
@@ -316,12 +341,22 @@ class HttpPacket:
 			return False
 		
 		length = self.get_header('Content-Length')
-		#print (length)
+		self._log.debug3('Content-Length: %s' % (length))
 		
-		if length is not None:
-			self._body_stream = self._input_stream.get_count_stream(length)
+		if isinstance(self, HttpAnswer):
+			
+			if self._status_code == 200:
+				# Todo: здесь нужен http body stream на основе input stream
+				# Также нужно проверить код, что body Идет по частям
+				# В противном случае, _body_stream создавать, если packet является ответом
+				if length is not None:
+					self._body_stream = self._input_stream.get_count_stream(length)
+				else:
+					self._body_stream = self._input_stream
+			
 		else:
-			self._body_stream.feed_eof()
+			if length is not None:
+				self._body_stream = self._input_stream.get_count_stream(length)
 		
 		
 		return True
@@ -336,8 +371,10 @@ class HttpPacket:
 	
 	async def parse_end(self):
 		if self._body_stream is not None:
-			await self._body_stream.skip()
-			await self._body_stream.stop()
+			if self._body_stream != self._input_stream:
+				#print ('parse_end')
+				await self._body_stream.skip()
+				await self._body_stream.stop()
 	#!enddef parse_end	
 	
 #!endclass HttpPacket
@@ -370,11 +407,37 @@ class HttpAnswer(HttpPacket):
 		self._http_version = 'HTTP/1.1'
 		self._status_code = 200
 		
+		self._body_stream = QueueStream()
+		
 #!endclass HttpAnswer
 
 
 
 class HTTPServer(TCPConnection):
+	
+	async def handle_error(self, request, code):
+		
+		answer = request.create_answer()
+		answer.set_header('Content-type', 'text/html')
+		#answer.set_header('Connection', 'close')
+		
+		if code in HttpPacket.STATUS_CODES:
+			message = HttpPacket.STATUS_CODES.get(code)
+		else:
+			message = int(code)
+		
+		answer.write(to_byte('<h1><center>' + message + '</center></h1>'))
+		answer.write_eof()
+		
+		answer.set_transport(self._transport)
+		await answer.send()
+		
+		self.close()
+		
+	
+	async def handle_request_end(self, request, answer):
+		self._log.debug('Request = %sms' % ( (self._end_request - self._start_request).microseconds / 1000 ))
+		
 	
 	async def handle_request(self, request):
 		self._log.debug3 ('handle_request')
@@ -402,22 +465,33 @@ class HTTPServer(TCPConnection):
 				try:
 					answer = await self.handle_request(request)
 					
-					await answer.send()
-					
-					length = answer.get_header('Content-Length')
-					if length is None:
-						self.close()
-					
-					self._end_request = datetime.datetime.now()
-					self._log.debug('Request = %sms' % ( (self._end_request - self._start_request).microseconds / 1000 ))
-					
-					if self._close == False:
-						await request.parse_end()
-
+					if answer != None:
+						answer.set_transport(self._transport)
+						await answer.send()
 						
+						self._end_request = datetime.datetime.now()
+						
+						await self.handle_request_end(request, answer)
+						
+						length = answer.get_header('Content-Length')
+						if length is None:
+							self.close()
+							return 
+						
+						if self._close == False:
+							await request.parse_end()
+						
+					else:
+						await self.handle_error(request, 502)
+						
+					
 				except Exception as e:
 					print (get_traceback())
 					await self.handle_error(request, 502)
+			
+			else:
+				self.close()
+				return
 			
 			#!endif
 		#!endwhile
@@ -430,6 +504,7 @@ class HTTPServer(TCPConnection):
 		return request
 	
 	async def send_answer(self, answer):
+		#print (answer)
 		answer.set_transport(self._transport)
 		await answer.send()
 	#!enddef
@@ -439,6 +514,16 @@ class HTTPServer(TCPConnection):
 
 class HttpClient(TCPConnection):
 	
+	async def get_answer(self):
+		
+		await self._read_buffer._try_lock_read()
+		self._start_request = datetime.datetime.now()
+		answer = HttpAnswer(input_stream=self._read_buffer)
+		if await answer.parse():
+			return answer
+			
+		return None
+			
 	def create_request(self):
 		request = HttpRequest()
 		request.set_transport(self._transport)
@@ -448,5 +533,10 @@ class HttpClient(TCPConnection):
 		request.set_transport(self._transport)
 		await request.send()
 	#!enddef
+	
+	
+	def data_received(self, data):
+		super().data_received(data)
+		#print (data)
 	
 #!endclass HttpClient

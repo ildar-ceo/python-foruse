@@ -28,7 +28,7 @@ class TCPConnection(log.Log, asyncio.Protocol):
 	
 	
 	def get_reader(self):
-		return self._buffer
+		return self._read_buffer
 	
 	
 	def get_transport(self):
@@ -42,7 +42,11 @@ class TCPConnection(log.Log, asyncio.Protocol):
 	
 	
 	@classmethod
-	async def connect(cls, host, port, *args, **kwargs):
+	async def connect(cls, host, port, *args, loop=None, **kwargs):
+		
+		if loop == None:
+			loop = asyncio.get_event_loop()
+		
 		transport, client = await loop.create_connection(lambda: cls(), host, port, **kwargs)
 		return client
 	

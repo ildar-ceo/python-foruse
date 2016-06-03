@@ -59,6 +59,7 @@ class AbstractStream(log.Log):
 		self._buffer_start = 0
 		
 		self._buffer = None
+		self._log.set_level(kwargs.get('log_level', 'ERROR'))
 		
 	def set_min_size(self, size):
 		if size <= self._buffer._max_size:
@@ -115,7 +116,9 @@ class AbstractStream(log.Log):
 	async def open(self):
 		return await self._open()
 	
-	
+	async def stop(self):
+		await self.close()
+		
 	async def close(self):
 		await self._close()
 	
@@ -170,6 +173,9 @@ class AbstractStream(log.Log):
 		
 		self._can_read()
 		
+		if count == 0:
+			return b""
+		
 		if self._buffer != None:
 			sz_buffer = len(self._buffer)
 			
@@ -177,8 +183,15 @@ class AbstractStream(log.Log):
 				self._clear_buffer()
 				return await self._read(count)
 			
+			if count < 0:
+				data = self._buffer[self._buffer_start:]
+				self._clear_buffer()
+				return data
+			
 			#print ('--------')
 			#print ('count = %s' % (count))
+			#print ('sz_buffer = %s' % (sz_buffer))
+			#print ('_buffer_start = %s' % (self._buffer_start))
 			#print ('free = %s' % (sz_buffer - self._buffer_start))
 			
 			if count > sz_buffer - self._buffer_start:
@@ -310,45 +323,6 @@ class AbstractStream(log.Log):
 		async for buf in self.readline_iter(maxlen):
 			data.extend(buf)
 		return data
-	
-	"""
-	
-	async def readline111(self, maxlen = -1):
-		self._can_read()
-		
-		sz_buffer = 0
-		if self._buffer is not None:
-			sz_buffer = len(self._buffer)
-			
-		count = 0
-		data = bytearray()
-		while not await self.eof():
-			if self._buffer is None:
-				self._buffer = await self._read(self._chunk_size)
-				sz_buffer = len(self._buffer)
-				
-			pos_n = self._buffer.find(b'\n', self._buffer_start)
-			
-			if pos_n == -1:
-				count += sz_buffer
-			
-			else:
-				count += sz_buffer + pos_n - self._buffer_start + 1
-			
-			if count > maxlen and maxlen != -1:
-				raise EndLineException
-			
-			if pos_n != -1:
-				data.extend(self._buffer[self._buffer_start:pos_n])
-				self._buffer_start = pos_n + 1
-				break
-				
-			data.extend(self._buffer[self._buffer_start:])
-			self._clear_buffer()
-			
-		return data
-	"""
-	
 	
 	async def skip(self):
 		while not await self.eof():
@@ -487,10 +461,13 @@ class QueueStream(AbstractStream):
 		return True
 	
 	
+	async def seek(self, offset, whence = AbstractStream.SEEK_SET):
+		pass
+	
 	
 	async def _try_feed_data(self):
 		
-		if self._current_size > self._max_size and not self._is_stop:
+		if self._current_size > self._max_size and not self._is_stop and not self._is_eof:
 			self._log.debug3('Try %s = %s' % (self._current_size, self._max_size))
 			await self._lock_feed()
 			return False
@@ -537,7 +514,6 @@ class QueueStream(AbstractStream):
 	
 	
 	
-	
 	def is_stop(self):
 		return self._is_stop
 	
@@ -562,8 +538,11 @@ class QueueStream(AbstractStream):
 		if len(self._list) == 0:
 			return b''
 		
+		if count == 0:
+			return b''
+		
 		sz = len(self._list[0])
-		if sz > count and count != -1:
+		if sz > count and count > 0:
 			data = self._list[0][0:count]
 			self._list[0] = self._list[0][count:]
 			self._current_size -= count
@@ -573,18 +552,19 @@ class QueueStream(AbstractStream):
 		data = self._list[0]
 		del self._list[0]
 		
-		#if self._current_size <= self._max_size * 0.75 or self._current_size == 0;
 		self._unlock_feed()
 		
 		return data
 	
 	def feed_data(self, buf):
+		self._log.debug3('feed_data')
 		if not self._is_stop:
 			self._current_size += len(buf)
 			self._list.append(buf)
 			self._unlock_read()
 	
 	def feed_flush(self):
+		self._log.debug3('feed_flush')
 		self._unlock_read()
 	
 	def feed_eof(self):
@@ -595,16 +575,16 @@ class QueueStream(AbstractStream):
 		pass
 	
 	async def _tell(self):
-		return 0
+		return None
 	
 	async def _size(self):
-		return self._current_size
+		return None
 	
 	async def _eof(self):
-		return len(self._list) == 0 and self._is_eof == True
+		return len(self._list) == 0 and (self._is_eof == True or self._is_stop == True)
 	
 	async def eof(self):
-		return len(self._list) == 0 and self._is_eof == True
+		return len(self._list) == 0 and (self._is_eof == True or self._is_stop == True)
 	
 	async def _flush(self):
 		pass
