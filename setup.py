@@ -4,9 +4,9 @@
 Инструкции:
 
 python3 setup.py sdist - Сборка пакета
-python3 setup.py develop - Установка пакета для разработки
-pip3 install dist/foruse-0.1.zip - Установка пакета
-pip3 uninstall foruse - Удаление пакета
+sudo python3 setup.py develop - Установка пакета для разработки
+sudo pip3 install dist/foruse-0.2.zip - Установка пакета
+sudo pip3 uninstall foruse - Удаление пакета
 python3 setup.py register - Зарегистрировать пакет в pypi
 python3 setup.py sdist upload - Залить на сервер
 """
@@ -18,6 +18,7 @@ PACKAGE = "foruse"
 NAME = "foruse"
 DESCRIPTION = "Library For use on python"
 URL = "https://github.com/vistoyn/python-foruse"
+LICENSE = 'MIT License'
 AUTHOR = __import__(PACKAGE).__author__
 AUTHOR_EMAIL = __import__(PACKAGE).__email__
 VERSION = __import__(PACKAGE).__version__
@@ -26,10 +27,10 @@ setup(
 	name=NAME,
 	version=VERSION,
 	description=DESCRIPTION,
-	long_description=open(join(dirname(__file__), 'README.md')).read(),
+	long_description=open(join(dirname(__file__), 'README.lnk')).read(),
 	author=AUTHOR,
 	author_email=AUTHOR_EMAIL,
-	license='MIT License',
+	license=LICENSE,
 	url = URL,
 	packages=find_packages(),
 	include_package_data = True,

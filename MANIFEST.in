@@ -1,4 +1,5 @@
-recursive-include pyangularjs *.py
-recursive-include pyangularjs *.pyc
+recursive-include foruse *.py
+recursive-include examples *.py
+include README.md LICENSE.txt CHANGES.txt
 global-exclude *.pyc
 global-exclude .git

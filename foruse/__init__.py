@@ -4,7 +4,7 @@ __author__ = "Ildar Bikmamatov"
 __email__ = "vistoyn@gmail.com"
 __copyright__ = "Copyright 2016"
 __license__ = "MIT"
-__version__ = "0.1"
+__version__ = "0.2"
 
 from . import log
 from .lib import *
