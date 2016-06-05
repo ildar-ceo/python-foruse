@@ -27,7 +27,7 @@ setup(
 	name=NAME,
 	version=VERSION,
 	description=DESCRIPTION,
-	long_description=open(join(dirname(__file__), 'README.lnk')).read(),
+	long_description=open(join(dirname(__file__), 'DESCRIPTION.rst')).read(),
 	author=AUTHOR,
 	author_email=AUTHOR_EMAIL,
 	license=LICENSE,
