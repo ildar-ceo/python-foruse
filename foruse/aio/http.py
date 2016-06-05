@@ -222,7 +222,7 @@ class HttpPacket(log.Log):
 			value = value.strip()
 			self._headers[ukey]=(key,value)
 		except Exception as e:
-			print (e)
+			#print (e)
 			return False
 		
 		return True
@@ -274,7 +274,7 @@ class HttpPacket(log.Log):
 			
 			addr = self._transport.get_extra_info('peername')
 			#print (addr)
-			self._log.debug3('Send packet to %s:%s ' % addr)
+			self._log.debug3('Send packet to {} ' . format(addr))
 				
 			self.remove_header('Content-Length')
 			if self._body_stream is not None:
@@ -288,7 +288,7 @@ class HttpPacket(log.Log):
 			if self._body_stream is not None:
 				while not await self._body_stream.eof():
 					data = await self._body_stream.read(8192)
-					print (data)
+					#print (data)
 					self._transport.write(data)
 				await self._body_stream.close()
 			#!endif
@@ -428,9 +428,9 @@ class HTTPServer(TCPConnection):
 		#answer.set_header('Connection', 'close')
 		
 		if code in HttpPacket.STATUS_CODES:
-			message = HttpPacket.STATUS_CODES.get(code)
+			message = str(code) + ' ' + HttpPacket.STATUS_CODES.get(code)
 		else:
-			message = int(code)
+			message = str(code)
 		
 		answer.write(to_byte('<h1><center>' + message + '</center></h1>'))
 		answer.write_eof()

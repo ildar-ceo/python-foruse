@@ -1,0 +1,11 @@
+HTTP/1.1 200 OK
+Date: Wed, 11 Feb 2009 11:20:59 GMT
+Server: Apache
+X-Powered-By: PHP/5.2.4-2ubuntu5wm1
+Last-Modified: Wed, 11 Feb 2009 11:20:59 GMT
+Content-Language: ru
+Content-Type: text/html; charset=utf-8
+Content-Length: 1000
+Connection: close
+
+Hello world!!!

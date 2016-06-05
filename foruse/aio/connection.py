@@ -50,6 +50,16 @@ class TCPConnection(log.Log, asyncio.Protocol):
 		transport, client = await loop.create_connection(lambda: cls(), host, port, **kwargs)
 		return client
 	
+	
+	@classmethod
+	async def connect_unix(cls, filename, *args, loop=None, **kwargs):
+		
+		if loop == None:
+			loop = asyncio.get_event_loop()
+		
+		transport, client = await loop.create_unix_connection(lambda: cls(), filename, **kwargs)
+		return client
+	
 		
 	def connection_made(self, transport):
 		self._log.debug3 ('connection_made')
