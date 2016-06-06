@@ -262,7 +262,7 @@ def join_paths(*args, **kwargs):
 	arr = [""] * (len(args) * 2)
 	i = 0
 	for p in args:
-		if p == "":
+		if (p is None) or (p == "") or not (type(p) is str):
 			continue
 		if p[0] != '/':
 			arr[i] = '/'
@@ -272,26 +272,31 @@ def join_paths(*args, **kwargs):
 	s = re.sub('/+','/',s)
 	return delete_last_slash(s)
 	
-
+def join_path(*args, **kwargs):
+	return join_paths(*args, **kwargs)
+	
 # -----------------------------------------------------------------------------
 # Улучшенная реализация функции urlparse2
 # -----------------------------------------------------------------------------
 	
 class UrlSplitResult:
 	def __init__(self, *args, **kwargs):
-		self.scheme = xarr(args, 0)
-		self.netloc = xarr(args, 1)
-		self.path = xarr(args, 2)
-		self.query = xarr(args, 3)
-		self.fragment = xarr(args, 4)
+		self.scheme = None
+		self.path = None
+		self.query = None
+		self.fragment = None
 		self.hostname = None
 		self.port = None
 		self.username = None
 		self.password = None
 	#!enddef __init__
 	
-	def init(self):
-		netloc = self.netloc
+	def from_urlparse(self, *args, **kwargs):
+		self.scheme = xarr(args, 0)
+		self.path = xarr(args, 2)
+		self.query = xarr(args, 3)
+		self.fragment = xarr(args, 4)
+		netloc = xarr(args, 1)
 		netloc = netloc.split(':')
 		if len(netloc) >= 3:
 			self.hostname = netloc[1]
@@ -341,9 +346,19 @@ class UrlSplitResult:
 
 def urlparse2(path, *args, **kwargs):
 	res = urlsplit(path, *args, **kwargs)
-	url = UrlSplitResult(*res)
+	url = UrlSplitResult()
+	url.from_urlparse(*res)
 	url.init()
 	return url
+	
+	
+def split_url(urls, ch=";"):
+	res=[]
+	arr=urls.split(ch)
+	for url in arr:
+		if is_exists(url):
+			res.append(urlparse2(url))
+	return res
 	
 	
 # -----------------------------------------------------------------------------
