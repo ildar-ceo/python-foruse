@@ -1,14 +1,13 @@
-#!/usr/bin/env python3.5
 # -*- coding: utf-8 -*-
 """
 Инструкции:
 
-python3 setup.py sdist - Сборка пакета
-sudo python3 setup.py develop - Установка пакета для разработки
-sudo pip3 install dist/foruse-0.2.zip - Установка пакета
-sudo pip3 uninstall foruse - Удаление пакета
-python3 setup.py register - Зарегистрировать пакет в pypi
-python3 setup.py sdist upload - Залить на сервер
+python setup.py sdist - Сборка пакета
+sudo python setup.py develop - Установка пакета для разработки
+sudo pip install dist/foruse-0.2.zip - Установка пакета
+sudo pip uninstall foruse - Удаление пакета
+python setup.py register - Зарегистрировать пакет в pypi
+python setup.py sdist upload - Залить на сервер
 """
 
 from setuptools import setup, find_packages
@@ -35,11 +34,18 @@ setup(
 	packages=find_packages(),
 	include_package_data = True,
 	install_requires=[
+		'python-dateutil',
 	],
 	classifiers=[
 		'License :: OSI Approved :: MIT License',
 		'Operating System :: OS Independent',
 		'Programming Language :: Python',
+		'Programming Language :: Python :: 2.6',
+		'Programming Language :: Python :: 2.7',
+		'Programming Language :: Python :: 3',
+		'Programming Language :: Python :: 3.2',
+		'Programming Language :: Python :: 3.3',
+		'Programming Language :: Python :: 3.4',
 		'Programming Language :: Python :: 3.5',
 	],
 )

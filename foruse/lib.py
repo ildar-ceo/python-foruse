@@ -9,10 +9,15 @@ import re
 import shutil
 import distutils.dir_util
 import distutils.file_util
-from urllib.parse import urlsplit
+
+IS_PYTHON2 = sys.version_info < (3,0)
+if IS_PYTHON2:
+	from urlparse import urlsplit
+else:
+	from urllib.parse import urlsplit
 
 def is_exists(a):
-	return a != None and a != "" and a != 0 and a != False
+	return a is not None and a != "" and a != 0 and a != False
 
 # -----------------------------------------------------------------------------
 # Функции для работы с массивами
@@ -26,7 +31,8 @@ def clone(var):
 
 
 # Получить значение из массива или списка по его ключам
-def xarr(arr, *args, default=None):
+def xarr(arr, *args, **kwargs):
+	default = kwargs.get('default', None)
 	res=arr
 	for key in args:
 		try:
@@ -47,7 +53,8 @@ def xclone(arr, *args, **kwargs):
 
 	
 # Добавить значение	в список по ключам
-def xadd(arr, *args, value=None):
+def xadd(arr, *args, **kwargs):
+	value = kwargs.get('value', None)
 	size = len(args)
 	res = arr
 	for index, key in xitems(args):
@@ -291,6 +298,18 @@ class UrlSplitResult:
 		self.password = None
 	#!enddef __init__
 	
+	def get_data(self):
+		return {
+			'scheme':self.scheme,
+			'path':self.path,
+			'query':self.query,
+			'fragment':self.fragment,
+			'hostname':self.hostname,
+			'port':self.port,
+			'username':self.username,
+			'password':self.password,
+		}
+	
 	def from_urlparse(self, *args, **kwargs):
 		self.scheme = xarr(args, 0)
 		self.path = xarr(args, 2)
@@ -348,7 +367,6 @@ def urlparse2(path, *args, **kwargs):
 	res = urlsplit(path, *args, **kwargs)
 	url = UrlSplitResult()
 	url.from_urlparse(*res)
-	url.init()
 	return url
 	
 	
