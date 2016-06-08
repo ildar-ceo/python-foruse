@@ -2,6 +2,7 @@
 
 import re
 import json
+from collections import OrderedDict
 from . import log
 from .error import *
 from .lib import *
@@ -20,17 +21,21 @@ class ConfigParser(log.Log):
 		self._config_type = kwargs.get('_config_type', 'ini')
 		self._config_path = ""
 		
-		self._init = {}
+		self._init = OrderedDict()
 		self._original = None
 		self._settings = None
 		
 	#!enddef __init__
 	
 	def set_init(self, init):
-		self._init = init
+		self._init = OrderedDict(init)
 
 	def get_settings(self):
 		return self._settings
+	
+	
+	def get(self, *args, **kwargs):
+		return xarr(self._settings, *args, **kwargs)
 	
 	
 	@classmethod
@@ -39,18 +44,18 @@ class ConfigParser(log.Log):
 		# Читает построчно файл и возравщает частично проанализированные строки
 		def read_file(config_path):
 			
-			settings = {}
+			settings = OrderedDict({})
 			
 			def add_settings(settings, section, key, val):
 				if section is None or key is None or val is None:	
 					return
 				
 				if settings.get(section) is None:
-					settings[section] = {}
+					settings[section] = OrderedDict({})
 				
 				section = section.strip()
 				key = key.strip()
-				val = val.strip('\r\n')
+				val = val.strip('\r\n ')
 				
 				if len(section) == 0:
 					return
@@ -132,7 +137,7 @@ class ConfigParser(log.Log):
 		
 		#!enddef read
 		
-		original = init
+		original = OrderedDict(init)
 		
 		# Читаем конфиг построчно
 		data = read_file(config_path)
@@ -165,6 +170,7 @@ class ConfigParser(log.Log):
 			#section = value
 		#!endfor
 		
+		#print (original)
 		return original
 	#!enddef read ini file
 	
@@ -174,7 +180,7 @@ class ConfigParser(log.Log):
 		for key in xkeys(arr):
 			val = arr[key]
 			t = type(val)
-			if (t is dict) or (t is list):
+			if (t is dict) or (t is list) or (t is OrderedDict):
 				self._format_all(arr[key])
 			
 			if t is str:
@@ -187,6 +193,8 @@ class ConfigParser(log.Log):
 		#!endfor
 	#!enddef _format_all
 	
+	def format_all(self):
+		self._format_all(self._settings)
 	
 	# Форматируем строку на основе self._settings
 	def format(self, val):
@@ -194,6 +202,7 @@ class ConfigParser(log.Log):
 		# если на входе строка вида %str1%/%str2%/%str3:str4%
 		# то в res будет ['str1', 'str2', 'str3:str4']
 		res = re.findall(r"%([^%]+)%", val)
+		#print (val)
 		
 		for name in res:
 			arr = name.split(':')
@@ -210,73 +219,27 @@ class ConfigParser(log.Log):
 				s = ""
 			
 			s = str(s)
-			
+			#print (val)
+			#print ("%s. %s = %s" % (val, name, s))
 			val = val.replace('%'+name+'%', s)
+			#print (val)
 		#!endfor
 			
 		return val
 	#!enddef format
 	
 	
-	def read(self, config_path):
+	def read(self, config_path, format_all=True):
 		
 		if self._config_type == 'ini':
 			self._config_path = config_path
 			self._original = ConfigParser.read_ini(config_path, init=self._init)
 			
 		self._settings = clone(self._original)
-		self._format_all(self._settings)
+		#print ('format_all = %s' % (format_all))
+		if format_all:
+			self.format_all()
 	#!enddef read
 	
 	
-	"""
-	def __init__(self, *args, **kwargs):
-		Parser.__init__(self, *args, **kwargs)
-		self.format_params={}
-	
-	def add_format(self, key, value):
-		self.format_params[key] = value
-	
-	def format(self, s):
-		s = str(s)
-		for key, value in xitems(self.format_params):
-			s = s.replace('%'+key+'%', str(value))
-			
-		return s
-	
-	def get_data(self, *args, **kwargs):
-		
-		default = kwargs.get('default')
-		type = kwargs.get('type')
-		res = None
-		try:
-			res = self
-			for i in args:
-				if IS_PYTHON2:
-					if isinstance(res, ConfigParser):
-						res = res.items(i)
-						#print (res)
-					else:
-						res = res[i]
-				else:
-					if isinstance(res, SectionProxy):
-						res = res.get(i, raw=True)
-					else:
-						res = res[i]
-		except Exception as e:
-			#print (get_traceback())
-			res = default
-		
-		if type == 'array':
-			res = str(res)
-			try:
-				res = json.loads(res)
-			except:
-				res = []
-				
-		return res
-	
-	def get_value(self, *args, **kwargs):
-		val = self.get(*args, **kwargs)
-		return self.format(val)
-	"""
+#!endclass ConfigParser

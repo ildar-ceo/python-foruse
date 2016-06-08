@@ -1,8 +1,0 @@
-HTTP/1.x 301 Moved Permanently
-Location: http://example.com/about.html#contacts
-Date: Thu, 19 Feb 2009 11:08:01 GMT
-Server: Apache/2.2.4
-Content-Type: text/html; charset=windows-1251
-Content-Length: 89
-
-<html><body><a href="http://example.com/about.html#contacts">Click here</a></body></html>

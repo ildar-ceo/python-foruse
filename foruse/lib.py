@@ -9,6 +9,7 @@ import re
 import shutil
 import distutils.dir_util
 import distutils.file_util
+from collections import OrderedDict
 
 IS_PYTHON2 = sys.version_info < (3,0)
 if IS_PYTHON2:
@@ -75,7 +76,7 @@ def xitems(arr):
 	t = type(arr)
 	if t is list or t is tuple:
 		return enumerate(arr)
-	elif t is dict:
+	elif t is dict or t is OrderedDict:
 		return arr.items()
 	return []
 	
@@ -84,7 +85,7 @@ def xkeys(arr):
 	t = type(arr)
 	if t is list or t is tuple:
 		return range(len(arr))
-	elif type(arr) is dict:
+	elif type(arr) is dict or t is OrderedDict:
 		return arr.keys()
 	return []
 	
@@ -93,7 +94,7 @@ def xvalues(arr):
 	t = type(arr)
 	if t is list or t is tuple:
 		return arr
-	elif t is dict:
+	elif t is dict or t is OrderedDict:
 		return arr.values()
 	return []
 
@@ -347,6 +348,9 @@ class UrlSplitResult:
 		
 		if is_exists(self.scheme):
 			res = str(self.scheme) + "://" + str(res)
+		else:
+			if is_exists(self.hostname):
+				res = "//" + str(res)
 		
 		if is_exists(self.path):
 			res = res + str(self.path)
@@ -364,6 +368,8 @@ class UrlSplitResult:
 
 
 def urlparse2(path, *args, **kwargs):
+	if isinstance(path, UrlSplitResult):
+		return path
 	res = urlsplit(path, *args, **kwargs)
 	url = UrlSplitResult()
 	url.from_urlparse(*res)

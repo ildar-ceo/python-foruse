@@ -82,6 +82,7 @@ class Logging:
 	def log(self, s, *args, **kwargs):
 		
 		#print (self.log_colors)
+		color = kwargs.get('color')
 		
 		level_num = kwargs.get('level')
 		level_str = TO_STR.get(level_num)
@@ -98,6 +99,10 @@ class Logging:
 		else:
 			if level_num > self.log_level:
 				return
+		
+		if color is not None:
+			if COLORS.get(color) is not None:
+				level_color = color
 		
 		time = localtime()
 		
