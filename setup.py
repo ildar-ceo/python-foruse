@@ -4,7 +4,7 @@
 
 python setup.py sdist - Сборка пакета
 sudo python setup.py develop - Установка пакета для разработки
-sudo pip install dist/foruse-0.2.zip - Установка пакета
+sudo pip install foruse - Установка пакета
 sudo pip uninstall foruse - Удаление пакета
 python setup.py register - Зарегистрировать пакет в pypi
 python setup.py sdist upload - Залить на сервер
